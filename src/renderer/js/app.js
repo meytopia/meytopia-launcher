@@ -629,6 +629,23 @@ $("#btn-check-update").addEventListener("click", async () => {
   toast("Recherche de mise à jour lancée.");
 });
 
+/* ── Désinstallation complète (Zone dangereuse) ────────────── */
+$("#btn-uninstall").addEventListener("click", () => { $("#uninstall-modal").hidden = false; });
+$("#uninstall-cancel").addEventListener("click", () => { $("#uninstall-modal").hidden = true; });
+$("#uninstall-confirm").addEventListener("click", async () => {
+  const btn = $("#uninstall-confirm");
+  btn.disabled = true;
+  btn.textContent = "Suppression en cours…";
+  const result = await api.app.uninstall();
+  if (!result.ok) {
+    btn.disabled = false;
+    btn.textContent = "Tout supprimer";
+    $("#uninstall-modal").hidden = true;
+    if (result.reason === "game-running") toast("Ferme d'abord Minecraft avant de désinstaller.", 6000);
+  }
+  // Si ok : le processus principal ferme le launcher (et lance le désinstalleur en version installée)
+});
+
 /* ── Premier lancement (CDC F1) ────────────────────────────── */
 function showObStep(step) {
   $$(".ob-step").forEach((el) => { el.hidden = el.dataset.step !== String(step); });

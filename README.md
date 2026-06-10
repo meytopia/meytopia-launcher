@@ -22,15 +22,6 @@ npm install
 npm start
 ```
 
-Avant le premier lancement, remplacer le pseudo GitHub dans la config :
-
-```powershell
-$user = gh api user -q .login
-foreach ($f in "src\main\config.js", "package.json") {
-  [IO.File]::WriteAllText($f, ([IO.File]::ReadAllText($f) -replace "__GITHUB_USER__", $user))
-}
-```
-
 ## Publier une version du modpack
 
 ```powershell

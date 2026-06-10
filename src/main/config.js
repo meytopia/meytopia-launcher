@@ -1,9 +1,8 @@
 // ============================================================
 // Meytopia Launcher — Configuration codée en dur
 // SEUL endroit où le dépôt de données est référencé.
-// __GITHUB_USER__ est remplacé par la commande d'installation.
 // ============================================================
-const DATA_OWNER = '__GITHUB_USER__';
+const DATA_OWNER = 'meytopia';
 const DATA_REPO = 'meytopia-data';
 
 const RAW_BASE = `https://raw.githubusercontent.com/${DATA_OWNER}/${DATA_REPO}/main`;

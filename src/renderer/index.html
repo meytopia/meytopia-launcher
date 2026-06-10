@@ -228,6 +228,17 @@
             <button class="ghost-btn" id="btn-check-update">Rechercher les mises à jour</button>
           </div>
         </div>
+
+        <div class="panel danger-zone">
+          <p class="eyebrow">Zone dangereuse</p>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Tout désinstaller</span>
+              <span class="setting-hint">Supprime le jeu, le modpack, Java, les comptes, les réglages — et le launcher lui-même (version installée). Sans aucune trace.</span>
+            </div>
+            <button class="ghost-btn danger" id="btn-uninstall">Désinstaller…</button>
+          </div>
+        </div>
       </section>
 
     </main>
@@ -327,6 +338,25 @@
         <h3>Tout est prêt !</h3>
         <p class="modal-desc" id="ob-recap"></p>
         <div class="modal-actions"><button class="primary-btn" id="ob-finish">Terminer et vérifier les fichiers</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Confirmation de désinstallation complète ════════ -->
+  <div id="uninstall-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h3>Tout désinstaller ?</h3>
+      <p class="modal-desc">Cette action supprime définitivement, sans laisser de trace :</p>
+      <div class="modal-list">
+        <div class="modal-row"><strong>Le jeu et le modpack</strong><span>Minecraft, mods, configs, resourcepacks, shaders, mondes solo</span></div>
+        <div class="modal-row"><strong>Java et les caches</strong><span>runtimes téléchargés, fichiers temporaires du launcher</span></div>
+        <div class="modal-row"><strong>Les comptes et réglages</strong><span>sessions Microsoft enregistrées, paramètres</span></div>
+        <div class="modal-row"><strong>Le launcher</strong><span>désinstallation du programme et de ses raccourcis (version installée)</span></div>
+      </div>
+      <p class="modal-desc"><strong>Action irréversible.</strong> Le launcher se fermera à la fin.</p>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="uninstall-cancel">Annuler</button>
+        <button class="primary-btn danger" id="uninstall-confirm">Tout supprimer</button>
       </div>
     </div>
   </div>

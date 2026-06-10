@@ -280,6 +280,37 @@ ipcMain.handle('storage:migrate', async () => {
   }
 });
 
+/* ── IPC : désinstallation complète, sans trace ────────────── */
+ipcMain.handle('app:uninstall', async () => {
+  if (game.isRunning()) return { ok: false, reason: 'game-running' };
+
+  // Cibles calculées AVANT de supprimer settings.json (dossier migré inclus)
+  const paths = require('./paths');
+  const dataRoot = paths.getDataDir();
+  const targets = [
+    path.join(dataRoot, 'game'),
+    path.join(dataRoot, 'runtime'),
+    path.join(dataRoot, 'launcher'),
+    paths.getConfigDir(), // settings.json (+ données si emplacement par défaut)
+  ];
+  for (const dir of targets) {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+  // Caches Electron : au mieux maintenant (certains fichiers sont verrouillés
+  // tant que l'app tourne) ; le désinstalleur NSIS termine le travail.
+  try { await fs.promises.rm(app.getPath('userData'), { recursive: true, force: true }); } catch { /* verrouillé */ }
+
+  // Version installée : on lance le désinstalleur NSIS puis on quitte
+  if (app.isPackaged) {
+    const uninstaller = path.join(path.dirname(app.getPath('exe')), 'Uninstall Meytopia Launcher.exe');
+    if (fs.existsSync(uninstaller)) {
+      require('child_process').spawn(uninstaller, [], { detached: true, stdio: 'ignore' }).unref();
+    }
+  }
+  setTimeout(() => app.quit(), 200);
+  return { ok: true };
+});
+
 /* ── IPC : mise à jour du launcher (CDC F3) ────────────────── */
 ipcMain.handle('updater:status', () => updater.getStatus());
 ipcMain.handle('updater:check', () => updater.check());

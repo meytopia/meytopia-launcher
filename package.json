@@ -22,26 +22,20 @@
   "build": {
     "appId": "fr.meytopia.launcher",
     "productName": "Meytopia Launcher",
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": "nsis"
-    },
+    "files": ["src/**/*", "package.json"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "target": "nsis" },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": true,
+      "include": "build/installer.nsh"
     },
     "publish": {
       "provider": "github",
-      "owner": "__GITHUB_USER__",
+      "owner": "meytopia",
       "repo": "meytopia-launcher"
     }
   }
