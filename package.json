@@ -1,0 +1,15 @@
+{
+  "name": "meytopia-launcher",
+  "productName": "Meytopia Launcher",
+  "version": "2.0.0-p1",
+  "description": "Launcher officiel du serveur Minecraft communautaire Meytopia",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Meytopia",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^42.0.0"
+  }
+}
