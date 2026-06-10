@@ -2,14 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https:;" />
   <title>Meytopia Launcher</title>
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
 
-  <!-- ════════ Barre de titre personnalisée (fenêtre sans bordure) ════════ -->
+  <!-- ════════ Barre de titre personnalisée ════════ -->
   <header id="titlebar">
     <div class="brand">
       <!-- Emplacement du logo : remplacer ce bloc par <img> quand le fichier sera fourni -->
@@ -17,7 +17,6 @@
       <span class="brand-name">MEYTOPIA</span>
       <span class="brand-tag">Launcher</span>
     </div>
-
     <div class="titlebar-actions">
       <button id="btn-drawer" class="tb-btn" title="Téléchargements">
         <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0 5-5m-5 5-5-5M4 20h16"/></svg>
@@ -66,10 +65,10 @@
         <span>Discord</span>
       </button>
       <div class="account-chip">
-        <div class="account-avatar" aria-hidden="true"></div>
+        <div class="account-avatar" id="account-avatar" aria-hidden="true"></div>
         <div class="account-meta">
-          <span class="account-name">Non connecté</span>
-          <span class="account-hint">Comptes — phase P2</span>
+          <span class="account-name" id="account-name">Non connecté</span>
+          <span class="account-hint" id="account-hint">Aucun compte</span>
         </div>
       </div>
     </nav>
@@ -79,43 +78,51 @@
 
       <!-- ── Accueil ── -->
       <section id="page-home" class="page active">
+        <div id="maintenance-banner" class="banner warn" hidden>
+          <strong>Maintenance</strong>
+          <span id="maintenance-text"></span>
+        </div>
+        <div id="offline-banner" class="banner" hidden>
+          Hors ligne — fichiers non vérifiés (mode dégradé)
+        </div>
+
         <div class="hero">
           <p class="eyebrow">Serveur communautaire moddé</p>
           <!-- Emplacement du visuel d'accueil : remplacer le h1 par le logo fourni -->
           <h1 class="hero-title">MEYTOPIA</h1>
-          <p class="hero-sub">NeoForge 1.21.1 · modpack officiel</p>
+          <p class="hero-sub" id="hero-sub">Modpack officiel</p>
 
           <button id="btn-play" class="play-btn">
-            <span class="play-label">Jouer</span>
-            <span class="play-state">Connectez un compte</span>
+            <span class="play-label" id="play-label">Jouer</span>
+            <span class="play-state" id="play-state">Chargement…</span>
           </button>
-          <p class="hero-note">Lancement du jeu : phase P3 · Comptes : phase P2</p>
         </div>
 
         <div class="status-card">
           <div class="status-head">
             <p class="eyebrow">Serveur</p>
-            <span class="status-refresh">Actualisation toutes les 10 s — phase P5</span>
+            <span class="status-refresh" id="status-refresh">Actualisation toutes les 10 s</span>
           </div>
           <div class="status-grid">
             <div class="stat">
               <span class="stat-label">État</span>
-              <span class="stat-value"><span class="pixel-dot offline" aria-hidden="true"></span> Hors ligne</span>
+              <span class="stat-value"><span id="st-dot" class="pixel-dot offline" aria-hidden="true"></span> <span id="st-state">—</span></span>
             </div>
             <div class="stat">
               <span class="stat-label">Joueurs</span>
-              <span class="stat-value num">—&thinsp;/&thinsp;—</span>
+              <span class="stat-value num" id="st-players">—&thinsp;/&thinsp;—</span>
             </div>
             <div class="stat">
               <span class="stat-label">Version</span>
-              <span class="stat-value num">—</span>
+              <span class="stat-value num" id="st-version">—</span>
             </div>
             <div class="stat">
               <span class="stat-label">Ping</span>
-              <span class="stat-value num">— ms</span>
+              <span class="stat-value num" id="st-ping">—</span>
             </div>
           </div>
-          <button class="link-btn" disabled>Voir les joueurs connectés</button>
+          <button class="link-btn" id="players-toggle" disabled>Voir les joueurs connectés</button>
+          <div id="players-list" class="players-list" hidden></div>
         </div>
       </section>
 
@@ -125,40 +132,34 @@
           <h2>News</h2>
           <p class="page-desc">Les annonces publiées par l'équipe, de la plus récente à la plus ancienne.</p>
         </header>
-        <div class="empty">
-          <svg viewBox="0 0 24 24"><path d="M5 5h11v14H5zM16 9h3v10a2 2 0 0 1-2 2H7M8 9h5M8 12.5h5M8 16h3"/></svg>
-          <p>Aucune annonce pour l'instant.</p>
-          <p class="empty-hint">Les news du serveur s'afficheront ici — phase P5.</p>
-        </div>
+        <div id="news-list"></div>
       </section>
 
       <!-- ── Contenus ── -->
       <section id="page-content" class="page">
         <header class="page-head">
           <h2>Contenus</h2>
-          <p class="page-desc">Tout ce qui ne vient pas du modpack : catalogue approuvé et ajouts personnels.</p>
+          <p class="page-desc">Tout ce qui ne vient pas du modpack : catalogue approuvé et ajouts personnels. Ces contenus sont chargés avec le jeu tant qu'ils ne sont pas bloqués.</p>
         </header>
 
         <div class="folder-row">
-          <button class="folder-btn" disabled>Ouvrir mods</button>
-          <button class="folder-btn" disabled>Ouvrir config</button>
-          <button class="folder-btn" disabled>Ouvrir resourcepacks</button>
-          <button class="folder-btn" disabled>Ouvrir shaderpacks</button>
+          <button class="folder-btn" data-dir="mods">Ouvrir mods</button>
+          <button class="folder-btn" data-dir="config">Ouvrir config</button>
+          <button class="folder-btn" data-dir="resourcepacks">Ouvrir resourcepacks</button>
+          <button class="folder-btn" data-dir="shaderpacks">Ouvrir shaderpacks</button>
         </div>
 
-        <div class="content-cols">
-          <div class="panel">
-            <p class="eyebrow">Catalogue approuvé</p>
-            <div class="empty small">
-              <p>Le catalogue validé par les admins arrive en phase P6.</p>
-            </div>
-          </div>
-          <div class="panel">
+        <div class="panel">
+          <p class="eyebrow">Catalogue approuvé</p>
+          <div id="optional-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
             <p class="eyebrow">Mes ajouts</p>
-            <div class="empty small">
-              <p>Ajoutez vos propres mods, packs et shaders ici — phase P6.</p>
-            </div>
+            <button id="btn-add-files" class="ghost-btn small">Ajouter un fichier</button>
           </div>
+          <div id="local-list"></div>
         </div>
       </section>
 
@@ -169,15 +170,11 @@
           <p class="page-desc">Les changements du launcher et du modpack, version par version.</p>
         </header>
         <div class="chip-row">
-          <button class="chip active" disabled>Tout</button>
-          <button class="chip" disabled>Launcher</button>
-          <button class="chip" disabled>Modpack</button>
+          <button class="chip active" data-filter="all">Tout</button>
+          <button class="chip" data-filter="launcher">Launcher</button>
+          <button class="chip" data-filter="modpack">Modpack</button>
         </div>
-        <div class="empty">
-          <svg viewBox="0 0 24 24"><path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4"/></svg>
-          <p>Aucun patchnote publié.</p>
-          <p class="empty-hint">L'historique des versions s'affichera ici — phase P5.</p>
-        </div>
+        <div id="changelog-list"></div>
       </section>
 
       <!-- ── Paramètres ── -->
@@ -188,9 +185,9 @@
 
         <div class="panel">
           <p class="eyebrow">Comptes</p>
-          <div class="empty small">
-            <p>La gestion des comptes Microsoft arrive en phase P2.</p>
-          </div>
+          <div id="accounts-list"></div>
+          <button id="btn-add-account" class="ghost-btn">Ajouter un compte Microsoft</button>
+          <p class="setting-hint account-note">Connexion via la fenêtre officielle Microsoft — le compte doit posséder Minecraft.</p>
         </div>
 
         <div class="panel">
@@ -198,7 +195,7 @@
           <div class="setting-row">
             <div class="setting-meta">
               <span class="setting-name">Mémoire allouée</span>
-              <span class="setting-hint">Recommandé : 8 Go</span>
+              <span class="setting-hint" id="ram-hint">Recommandé : 8 Go</span>
             </div>
             <div class="ram-control">
               <input type="range" id="ram-slider" min="4" max="16" step="1" value="8" />
@@ -212,11 +209,11 @@
           <div class="setting-row">
             <div class="setting-meta">
               <span class="setting-name">Dossier des données</span>
-              <span class="setting-hint num">%APPDATA%\.meytopia</span>
+              <span class="setting-hint num" id="data-dir-path">…</span>
             </div>
             <div class="btn-group">
-              <button class="ghost-btn" disabled>Modifier</button>
-              <button class="ghost-btn" disabled>Vérification complète</button>
+              <button class="ghost-btn" id="btn-migrate">Modifier</button>
+              <button class="ghost-btn" id="btn-fullcheck">Vérification complète</button>
             </div>
           </div>
         </div>
@@ -226,9 +223,9 @@
           <div class="setting-row">
             <div class="setting-meta">
               <span class="setting-name">Meytopia Launcher <span id="app-version" class="num"></span></span>
-              <span class="setting-hint">Mises à jour automatiques — phase P8</span>
+              <span class="setting-hint">Mises à jour automatiques via GitHub Releases</span>
             </div>
-            <button class="ghost-btn" disabled>Rechercher les mises à jour</button>
+            <button class="ghost-btn" id="btn-check-update">Rechercher les mises à jour</button>
           </div>
         </div>
       </section>
@@ -238,17 +235,100 @@
     <!-- ════════ Volet Téléchargements (à droite) ════════ -->
     <aside id="drawer" aria-label="Téléchargements">
       <div class="drawer-head">
-        <p class="eyebrow">Téléchargements</p>
+        <p class="eyebrow" id="dl-title">Téléchargements</p>
         <button id="drawer-close" class="tb-btn" title="Fermer le volet">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
       </div>
-      <div class="empty small">
+
+      <div id="dl-empty" class="empty small">
         <p>Aucun téléchargement en cours.</p>
-        <p class="empty-hint">La file s'ouvrira ici automatiquement — phase P4.</p>
+        <p class="empty-hint">La file s'ouvrira ici automatiquement.</p>
+      </div>
+
+      <div id="dl-active" hidden>
+        <p class="dl-label" id="dl-label"></p>
+        <div class="dl-bar"><div class="dl-bar-fill" id="dl-bar-fill"></div></div>
+        <div class="dl-stats num">
+          <span id="dl-percent">0 %</span>
+          <span id="dl-size">0 / 0</span>
+          <span id="dl-speed">0 Mo/s</span>
+        </div>
+        <div class="dl-stats num">
+          <span>Écoulé : <span id="dl-elapsed">0 s</span></span>
+          <span>Restant : <span id="dl-eta">—</span></span>
+        </div>
+        <div class="dl-controls">
+          <button class="ghost-btn small" id="dl-pause">Pause</button>
+          <button class="ghost-btn small" id="dl-resume" hidden>Reprendre</button>
+          <button class="ghost-btn small" id="dl-retry" hidden>Relancer</button>
+        </div>
+        <p class="setting-hint" id="dl-interrupted" hidden>Téléchargement interrompu — relance manuelle (coupure réseau ?).</p>
+        <div id="dl-files"></div>
       </div>
     </aside>
 
+  </div>
+
+  <!-- ════════ Fenêtre blocklist (CDC F6) ════════ -->
+  <div id="block-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h3>Fichiers interdits détectés</h3>
+      <p class="modal-desc">Ces fichiers sont bloqués par les administrateurs. Le jeu ne peut pas se lancer tant qu'ils sont présents.</p>
+      <div id="block-list" class="modal-list"></div>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="block-cancel">Annuler</button>
+        <button class="primary-btn" id="block-delete">Supprimer ces fichiers et jouer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Choix de destination pour les .zip ════════ -->
+  <div id="zip-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h3>Où installer ces fichiers .zip ?</h3>
+      <p class="modal-desc" id="zip-desc"></p>
+      <div class="modal-actions">
+        <button class="ghost-btn" id="zip-cancel">Annuler</button>
+        <button class="ghost-btn" id="zip-rp">Resourcepacks</button>
+        <button class="primary-btn" id="zip-sp">Shaderpacks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Premier lancement (CDC F1) ════════ -->
+  <div id="onboarding" class="modal-overlay onboarding" hidden>
+    <div class="modal ob">
+      <div class="ob-step" data-step="1">
+        <div class="brand-mark big" aria-hidden="true">M</div>
+        <h3>Bienvenue sur Meytopia</h3>
+        <p class="modal-desc">Le launcher officiel du serveur. Quelques réglages rapides et tu es prêt à jouer.</p>
+        <div class="modal-actions"><button class="primary-btn ob-next">Commencer</button></div>
+      </div>
+      <div class="ob-step" data-step="2" hidden>
+        <h3>Ton compte Microsoft</h3>
+        <p class="modal-desc">Connecte le compte qui possède Minecraft. Tu pourras en ajouter d'autres plus tard.</p>
+        <div class="modal-actions">
+          <button class="ghost-btn ob-next">Plus tard</button>
+          <button class="primary-btn" id="ob-add-account">Se connecter</button>
+        </div>
+      </div>
+      <div class="ob-step" data-step="3" hidden>
+        <h3>Stockage et performances</h3>
+        <p class="modal-desc">Dossier des fichiers du jeu : <span class="num" id="ob-dir">…</span><br/>(modifiable ensuite dans Paramètres)</p>
+        <div class="ram-control ob-ram">
+          <input type="range" id="ob-ram-slider" min="4" max="16" step="1" value="8" />
+          <span id="ob-ram-value" class="num">8 Go</span>
+        </div>
+        <p class="setting-hint" id="ob-ram-hint">Mémoire allouée au jeu</p>
+        <div class="modal-actions"><button class="primary-btn ob-next">Continuer</button></div>
+      </div>
+      <div class="ob-step" data-step="4" hidden>
+        <h3>Tout est prêt !</h3>
+        <p class="modal-desc" id="ob-recap"></p>
+        <div class="modal-actions"><button class="primary-btn" id="ob-finish">Terminer et vérifier les fichiers</button></div>
+      </div>
+    </div>
   </div>
 
   <!-- Notifications éphémères -->

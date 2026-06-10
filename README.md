@@ -1,51 +1,62 @@
 # Meytopia Launcher
 
-Launcher officiel du serveur Minecraft communautaire **Meytopia**.
-Développé d'après le cahier des charges v1.0 (+ avenant n°1).
+Launcher officiel du serveur Minecraft communautaire **Meytopia** (NeoForge 1.21.1).
+Développé d'après le cahier des charges v1.1 (+ avenant n°1).
 
-## Lancer en développement
+## État des phases
 
-Prérequis : [Node.js](https://nodejs.org) 20 ou plus récent (LTS conseillé).
+- [x] P1 — Squelette : fenêtre, navigation, thème
+- [x] P2 — Comptes Microsoft (multi-comptes, sessions chiffrées)
+- [x] P3 — Lancement du jeu : Java auto (Mojang), NeoForge, RAM
+- [x] P4 — Modpack : manifest, synchro delta, volet téléchargements, packtool
+- [x] P5 — Accueil : statut serveur (ping + query), News, Patchnotes
+- [x] P6 — Contenus : catalogue approuvé, ajouts perso, blocklist
+- [x] P7 — Onboarding, mode dégradé, maintenance, migration du dossier
+- [x] P8 — Installeur NSIS + mises à jour automatiques (GitHub Releases)
+- [ ] P9 — Panneau d'administration web (meytopia-data)
 
-```bash
+## Démarrage (développement)
+
+```powershell
 npm install
 npm start
 ```
 
-## Structure du projet
+Avant le premier lancement, remplacer le pseudo GitHub dans la config :
 
-```
-src/
-├── main/
-│   └── main.js        ← processus principal (fenêtre, IPC, sécurité)
-├── preload.js         ← pont sécurisé interface ↔ principal (contextBridge)
-└── renderer/
-    ├── index.html     ← structure de l'interface (barre de titre, nav, pages, volet)
-    ├── css/
-    │   ├── theme.css  ← charte : toutes les couleurs et variables (CDC §5.1)
-    │   └── app.css    ← mise en page et composants
-    └── js/
-        └── app.js     ← navigation, volet, contrôles fenêtre, toasts
+```powershell
+$user = gh api user -q .login
+foreach ($f in "src\main\config.js", "package.json") {
+  [IO.File]::WriteAllText($f, ([IO.File]::ReadAllText($f) -replace "__GITHUB_USER__", $user))
+}
 ```
 
-## État d'avancement
+## Publier une version du modpack
 
-| Phase | Contenu | État |
-|---|---|---|
-| **P1** | Squelette sécurisé, fenêtre sans bordure, thème, navigation, pages, volet droit | ✅ Livré |
-| P2 | Authentification Microsoft, multi-comptes | À venir |
-| P3 | Runtimes Java + lancement du jeu (NeoForge 1.21.1) | À venir |
-| P4 | Manifest, synchronisation delta, téléchargements | À venir |
-| P5 | Statut serveur, News, Patchnotes | À venir |
-| P6 | Page Contenus, blocklist | À venir |
-| P7 | Onboarding, Paramètres complets, maintenance | À venir |
-| P8 | Installeur NSIS + auto-update | À venir |
-| P9 | Panneau d'administration web (GitHub Pages) | À venir |
+```powershell
+node tools\packtool.js "C:\chemin\vers\le\pack" 1.0.0 "C:\chemin\vers\meytopia-data"
+# puis, dans meytopia-data : git add manifest.json ; git commit -m "Modpack 1.0.0" ; git push
+```
 
-## Notes
+Le « pack » est un dossier contenant `mods/`, `config/`, `resourcepacks/`, `shaderpacks/`.
 
-- Le bloc « M » de la barre de titre et le titre « MEYTOPIA » de l'accueil sont des
-  **emplacements provisoires** : remplacer par le logo dès qu'il sera fourni
-  (commentaires `<!-- Emplacement du logo -->` dans `index.html`).
-- Sécurité Electron : `contextIsolation`, `sandbox`, pas de `nodeIntegration`,
-  liens externes ouverts uniquement dans le navigateur.
+## Publier une version du launcher
+
+```powershell
+# Incrémenter "version" dans package.json, puis :
+$env:GH_TOKEN = (gh auth token)
+npm run publish
+```
+
+electron-builder construit l'installeur NSIS et le publie sur GitHub Releases ;
+les launchers installés se mettent à jour automatiquement (electron-updater).
+
+## Architecture
+
+- `src/main/` — processus principal : comptes, synchro, téléchargements, jeu, updater
+- `src/preload.js` — pont sécurisé (contextBridge)
+- `src/renderer/` — interface (HTML/CSS/JS, sans framework)
+- `tools/packtool.js` — génération du manifest + upload delta sur GitHub Releases
+
+Les JSON de pilotage (launcher, news, blocklist, optional, changelog, manifest)
+vivent dans le dépôt **meytopia-data**.

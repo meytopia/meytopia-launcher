@@ -466,3 +466,306 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ── Comptes (P2) ───────────────────────────────────────────── */
+#accounts-list { margin-bottom: 12px; }
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.account-row + .account-row { margin-top: 8px; }
+
+.row-avatar,
+#account-avatar {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.row-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+#account-avatar { font-size: 13px; }
+
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.row-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.row-badge.ok   { background: rgba(52, 211, 153, 0.15); color: var(--success); }
+.row-badge.warn { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+
+.row-actions { display: flex; gap: 8px; }
+
+.ghost-btn.small { padding: 6px 12px; font-size: 12px; }
+.ghost-btn.danger:not(:disabled):hover { border-color: var(--error); color: var(--error); }
+
+.account-note { margin-top: 10px; }
+
+/* ════════════════════════════════════════════════════════════
+   P3 → P8 — bannières, news, patchnotes, contenus, volet,
+   modales, onboarding
+   ════════════════════════════════════════════════════════════ */
+
+[hidden] { display: none !important; }
+
+/* ── Bannières (CDC F14, F16) ── */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-high);
+  font-size: 13px;
+  color: var(--text);
+}
+.banner.warn {
+  border-left-color: var(--warning);
+  color: var(--warning);
+}
+
+/* ── Cartes de news (CDC F9) ── */
+.news-card {
+  --card-accent: var(--accent);
+  position: relative;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--card-accent);
+  border-radius: var(--radius);
+}
+.news-card.unread {
+  border-color: var(--border-strong);
+  border-left-color: var(--card-accent);
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 60%);
+}
+.news-card.unread::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--card-accent);
+}
+.news-card h3 { margin: 0 0 4px; font-size: 17px; }
+.news-pin {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+.news-meta { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); }
+.news-image {
+  display: block;
+  max-width: 100%;
+  margin: 4px 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.news-body { font-size: 13.5px; line-height: 1.6; color: var(--text); }
+.news-body p { margin: 0 0 10px; }
+.news-body p:last-child { margin-bottom: 0; }
+.news-body a, .news-link { color: var(--accent); text-decoration: none; }
+.news-body a:hover, .news-link:hover { color: var(--accent-hover); text-decoration: underline; }
+.news-link { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; }
+
+/* ── Patchnotes (CDC F12) ── */
+.log-card {
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.log-head { display: flex; align-items: center; gap: 10px; }
+.log-target {
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+.log-target.launcher { color: var(--accent); background: var(--accent-soft); }
+.log-target.modpack { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.log-date { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+.log-title { margin: 8px 0 0; font-size: 13.5px; font-weight: 600; }
+.log-card ul { margin: 8px 0 0; padding-left: 18px; }
+.log-card li { margin: 3px 0; font-size: 13px; color: var(--text); }
+
+/* ── Lignes de contenu (CDC F11) ── */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.list-row .row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.list-row .row-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row .row-sub { font-size: 12px; color: var(--text-dim); }
+.list-row.blocked { border-color: var(--error); background: color-mix(in srgb, var(--error) 8%, var(--surface-high)); }
+.list-row.blocked .row-sub strong { color: var(--error); font-weight: 600; }
+
+/* ── Volet téléchargements (CDC F10) ── */
+.dl-label { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.dl-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.dl-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+  transition: width 0.25s ease;
+}
+.dl-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.dl-controls { display: flex; gap: 8px; margin: 12px 0; }
+#dl-files { margin-top: 10px; max-height: 42vh; overflow-y: auto; }
+.dl-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.dl-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-file-state { flex-shrink: 0; color: var(--text-dim); }
+.dl-file.error .dl-file-state { color: var(--error); }
+
+/* ── Modales (CDC F6, F11) ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 7, 18, 0.72);
+  backdrop-filter: blur(3px);
+}
+.modal {
+  width: min(480px, 92vw);
+  padding: 24px;
+  background: var(--surface-high);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+.modal h3 { margin: 0 0 8px; font-size: 17px; }
+.modal-desc { margin: 0 0 12px; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
+.modal-list { max-height: 220px; overflow-y: auto; margin-bottom: 6px; }
+.modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.modal-row span { font-size: 12px; color: var(--text-dim); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.primary-btn {
+  padding: 9px 18px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.primary-btn:hover { background: var(--accent-hover); }
+
+/* ── Premier lancement (CDC F1) ── */
+.onboarding { z-index: 95; }
+.modal.ob { width: min(520px, 92vw); text-align: center; }
+.modal.ob .modal-actions { justify-content: center; }
+.brand-mark.big {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  font-size: 26px;
+  border-radius: 14px;
+}
+.ob-ram { justify-content: center; margin: 16px 0 6px; }
+
+/* ── Divers ── */
+.players-list {
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.play-btn.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}

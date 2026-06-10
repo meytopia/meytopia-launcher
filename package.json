@@ -1,15 +1,48 @@
 {
   "name": "meytopia-launcher",
   "productName": "Meytopia Launcher",
-  "version": "2.0.0-p1",
+  "version": "0.0.1",
   "description": "Launcher officiel du serveur Minecraft communautaire Meytopia",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder",
+    "publish": "electron-builder --publish always"
   },
   "author": "Meytopia",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^42.0.0"
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0",
+    "minecraft-java-core": "^4.2.8"
+  },
+  "build": {
+    "appId": "fr.meytopia.launcher",
+    "productName": "Meytopia Launcher",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "__GITHUB_USER__",
+      "repo": "meytopia-launcher"
+    }
   }
 }
