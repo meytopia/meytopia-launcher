@@ -1,0 +1,53 @@
+# Meytopia — publication du launcher dans le cloud (Lot 3, J1)
+# Declencheur : pousser un tag vX.Y.Z (ou vX.Y.Z-beta.N)
+# Raccourci local : .\publier.ps1 X.Y.Z -Cloud
+name: Publier le launcher
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Coherence tag / package.json
+        shell: pwsh
+        run: |
+          $tagVer = "${{ github.ref_name }}".TrimStart("v")
+          $pkgVer = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($tagVer -ne $pkgVer) { throw "Tag v$tagVer mais package.json $pkgVer : bump la version avant de taguer." }
+
+      - run: npm ci
+
+      - name: Build de l'installeur
+        run: npx electron-builder --publish never
+
+      - name: Creation de la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart("v")
+          Copy-Item "dist/Meytopia Launcher Setup $v.exe" "dist/Meytopia-Launcher-Setup-$v.exe" -Force
+          Copy-Item "dist/Meytopia Launcher Setup $v.exe.blockmap" "dist/Meytopia-Launcher-Setup-$v.exe.blockmap" -Force
+          $assets = @("dist/Meytopia-Launcher-Setup-$v.exe", "dist/Meytopia-Launcher-Setup-$v.exe.blockmap")
+          if ($v -match "-beta\.") {
+            $assets += "dist/beta.yml"
+            gh release create "v$v" --title "v$v (beta)" --notes "Meytopia Launcher $v - canal beta" --prerelease @assets
+          } else {
+            Copy-Item "dist/latest.yml" "dist/beta.yml" -Force
+            $assets += @("dist/latest.yml", "dist/beta.yml")
+            gh release create "v$v" --title "v$v" --notes "Meytopia Launcher $v" @assets
+          }
+          gh release view "v$v" --json assets -q ".assets[].name"

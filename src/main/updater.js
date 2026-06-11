@@ -4,6 +4,7 @@
 // jouer, non bloquante pour la navigation. Inactif en dev.
 // ============================================================
 const { app } = require('electron');
+const settings = require('./settings');
 
 let emitToRenderer = () => {};
 function bindEmitter(fn) { emitToRenderer = fn; }
@@ -17,12 +18,21 @@ const updateRequired = () => ['available', 'downloading', 'ready'].includes(stat
 
 let autoUpdater = null;
 
+/** Canal de mise à jour : stable (latest) ou bêta, selon le réglage — relu avant chaque vérification. */
+function applyChannel() {
+  if (!autoUpdater) return;
+  const beta = settings.read().betaChannel === true;
+  autoUpdater.allowPrerelease = beta;
+  autoUpdater.channel = beta ? 'beta' : 'latest';
+}
+
 function init() {
   if (!app.isPackaged) { status = { state: 'dev' }; return; } // en développement : rien à mettre à jour
 
   ({ autoUpdater } = require('electron-updater'));
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  applyChannel();
 
   autoUpdater.on('checking-for-update', () => {
     if (!updateRequired()) setStatus({ state: 'checking' });
@@ -44,11 +54,13 @@ function init() {
 
   autoUpdater.checkForUpdates().catch(() => {});
   // Vérification automatique chaque minute (fichier servi par CDN : sans risque)
-  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 60 * 1000);
+  setInterval(() => { applyChannel(); autoUpdater.checkForUpdates().catch(() => {}); }, 60 * 1000);
 }
 
 function check() {
-  if (autoUpdater) autoUpdater.checkForUpdates().catch(() => {});
+  if (!autoUpdater) return;
+  applyChannel();
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 /** « Redémarrer et installer » (CDC F3). */

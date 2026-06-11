@@ -806,6 +806,14 @@ notifyToggle.addEventListener("change", () => api.settings.set({ notifyServerBac
 const trayToggle = $("#tray-toggle");
 trayToggle.addEventListener("change", () => api.settings.set({ minimizeToTray: trayToggle.checked }));
 
+const betaToggle = $("#beta-toggle");
+betaToggle.addEventListener("change", () => {
+  api.settings.set({ betaChannel: betaToggle.checked });
+  toast(betaToggle.checked
+    ? "Canal bêta activé — pris en compte à la prochaine vérification (≤ 1 min)."
+    : "Retour au canal stable.");
+});
+
 /* ── Amis à suivre (J4) ────────────────────────────────────── */
 let friendsList = [];
 function renderFriends() {
@@ -1185,6 +1193,7 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   minimizeToggle.checked = settings.minimizeOnPlay === true;
   notifyToggle.checked = settings.notifyServerBack === true;
   trayToggle.checked = settings.minimizeToTray === true;
+  betaToggle.checked = settings.betaChannel === true;
   friendsList = Array.isArray(settings.friends) ? settings.friends : [];
   renderFriends();
   ui.dismissedEventKey = settings.dismissedEventKey ?? null;
