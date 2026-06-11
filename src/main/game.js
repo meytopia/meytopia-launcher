@@ -3,6 +3,14 @@
 // Orchestration du clic JOUER : config distante → synchro du
 // pack → blocklist → Java + NeoForge + lancement (lib D9).
 // ============================================================
+const { app, BrowserWindow } = require('electron');
+const mainWin = () => BrowserWindow.getAllWindows()[0] ?? null;
+const semverLt = (a, b) => {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let k = 0; k < 3; k++) { if ((pa[k] || 0) !== (pb[k] || 0)) return (pa[k] || 0) < (pb[k] || 0); }
+  return false;
+};
 const path = require('path');
 const { Launch } = require('minecraft-java-core');
 const { getGameDir } = require('./paths');
@@ -35,6 +43,13 @@ async function play() {
   // 2) Config distante : maintenance + pointeur de modpack (CDC F14, F16)
   setState('checking', 'Vérification de la configuration…');
   const { data: config } = await remote.getLauncherConfig();
+
+  // Verrou à distance : version minimale du launcher exigée par launcher.json (I8)
+  const minVersion = config?.minLauncherVersion;
+  if (minVersion && app.isPackaged && semverLt(app.getVersion(), minVersion)) {
+    setState('error', `Mise à jour du launcher requise (minimum v${minVersion}).`);
+    return { ok: false, reason: 'outdated' };
+  }
   if (!config) return { ok: false, reason: 'offline-no-cache' };
   if (config.maintenance?.active && config.maintenance?.blockPlay !== false) {
     return { ok: false, reason: 'maintenance' };
@@ -53,6 +68,10 @@ async function play() {
     if (result.unknown.length) {
       content.registerDetected(result.unknown);
       emitToRenderer('content:unknown', result.unknown);
+    }
+    if (!result.ok && result.reason === 'disk') {
+      setState('error', `Espace disque insuffisant : ${result.freeGb} Go libres, ~${result.neededGb} Go nécessaires.`);
+      return { ok: false, reason: 'disk' };
     }
     if (!result.ok) {
       setState('idle');
@@ -102,11 +121,19 @@ async function play() {
 
   let started = false;
   launch.on('data', () => {
-    if (!started) { started = true; setState('ingame', 'En jeu'); }
+    if (!started) {
+      started = true;
+      setState('ingame', 'En jeu');
+      if (settings.read().minimizeOnPlay) mainWin()?.minimize(); // I4
+    }
   });
   launch.on('close', () => {
     running = false;
     setState(started ? 'closed' : 'error', started ? '' : 'Le jeu s\'est fermé avant de démarrer.');
+    if (settings.read().minimizeOnPlay) {
+      const win = mainWin();
+      if (win) { if (win.isMinimized()) win.restore(); win.focus(); } // retour du launcher (I4)
+    }
   });
   launch.on('error', (err) => {
     running = false;

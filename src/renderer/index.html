@@ -88,6 +88,14 @@
         <div id="offline-banner" class="banner" hidden>
           Hors ligne — fichiers non vérifiés (mode dégradé)
         </div>
+        <div id="event-banner" class="banner event-banner" hidden>
+          <strong id="event-title"></strong>
+          <span id="event-msg"></span>
+          <span class="event-actions">
+            <button class="ghost-btn" id="event-link" hidden>En savoir plus</button>
+            <button class="ghost-btn" id="event-close" title="Masquer">✕</button>
+          </span>
+        </div>
 
         <div class="hero">
           <p class="eyebrow">Serveur communautaire moddé</p>
@@ -150,6 +158,7 @@
           <button class="folder-btn" data-dir="config">Ouvrir config</button>
           <button class="folder-btn" data-dir="resourcepacks">Ouvrir resourcepacks</button>
           <button class="folder-btn" data-dir="shaderpacks">Ouvrir shaderpacks</button>
+          <button class="folder-btn" data-dir="screenshots">Ouvrir captures d'écran</button>
         </div>
 
         <div class="panel">
@@ -230,6 +239,26 @@
               <span class="switch-track" aria-hidden="true"></span>
             </label>
           </div>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Réduire le launcher pendant le jeu</span>
+              <span class="setting-hint">La fenêtre se réduit au lancement et revient quand tu quittes Minecraft</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="minimize-toggle" />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Me prévenir quand le serveur revient en ligne</span>
+              <span class="setting-hint">Notification Windows, même launcher réduit — pratique après une maintenance</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="notify-toggle" />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
         </div>
 
         <div class="panel">
@@ -254,6 +283,13 @@
               <span class="setting-hint update-line"><span class="update-dot idle" id="update-dot" aria-hidden="true"></span><span id="update-text">Vérification des mises à jour…</span></span>
             </div>
             <button class="ghost-btn" id="btn-check-update">Rechercher les mises à jour</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Besoin d'aide ?</span>
+              <span class="setting-hint">Copie tes infos techniques et colle-les sur le Discord pour un diagnostic rapide</span>
+            </div>
+            <button class="ghost-btn" id="btn-debug-info">Copier les infos de débogage</button>
           </div>
         </div>
 
@@ -371,6 +407,17 @@
   </div>
 
   <!-- ════════ Confirmation de désinstallation complète ════════ -->
+  <div id="whatsnew-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h3 id="whatsnew-title">Quoi de neuf</h3>
+      <p class="modal-desc">Cette mise à jour apporte :</p>
+      <ul id="whatsnew-list"></ul>
+      <div class="modal-actions">
+        <button class="primary-btn" id="whatsnew-close">C'est noté !</button>
+      </div>
+    </div>
+  </div>
+
   <div id="uninstall-modal" class="modal-overlay" hidden>
     <div class="modal">
       <h3>Tout désinstaller ?</h3>

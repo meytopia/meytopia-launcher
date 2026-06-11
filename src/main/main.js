@@ -2,7 +2,7 @@
 // Meytopia Launcher — Processus principal
 // Réfère au cahier des charges : §3.1 (architecture), §5.2 (fenêtre)
 // ============================================================
-const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme, Notification } = require('electron');
 const path = require('path');
 const os = require('os');
 const accounts = require('./accounts');
@@ -24,11 +24,24 @@ process.on('unhandledRejection', (reason) => {
   console.warn('[promesse non geree]', reason?.message ?? reason);
 });
 
+// Identité Windows : nécessaire aux notifications et à la barre des tâches (I2, I14)
+app.setAppUserModelId('fr.meytopia.launcher');
+
 let mainWindow = null;
 
 /** Émet un événement vers l'interface (utilisé par tous les modules). */
 function emitToRenderer(channel, payload) {
-  mainWindow?.webContents.send(channel, payload);
+  // Progression dans la barre des tâches Windows (I14)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (channel === 'downloads:update') {
+      const ratio = payload?.active && payload?.totalBytes > 0
+        ? Math.min(payload.doneBytes / payload.totalBytes, 1) : -1;
+      mainWindow.setProgressBar(ratio);
+    } else if (channel === 'updater:status') {
+      mainWindow.setProgressBar(payload?.state === 'downloading' ? Math.min((payload.percent ?? 0) / 100, 1) : -1);
+    }
+    mainWindow.webContents.send(channel, payload);
+  }
 }
 downloads.bindEmitter(emitToRenderer);
 game.bindEmitter(emitToRenderer);
@@ -227,7 +240,8 @@ ipcMain.handle('content:remove', (_e, relPath) => {
 });
 
 ipcMain.handle('content:openFolder', (_e, dirName) => {
-  if (!sync.MANAGED_DIRS.includes(dirName)) return;
+  const openable = [...sync.MANAGED_DIRS, 'screenshots']; // dossiers ouvrables (I5)
+  if (!openable.includes(dirName)) return;
   const dir = path.join(getGameDir(), dirName);
   fs.mkdirSync(dir, { recursive: true });
   shell.openPath(dir);
@@ -341,6 +355,39 @@ ipcMain.handle('app:uninstall', async () => {
 ipcMain.handle('updater:status', () => updater.getStatus());
 ipcMain.handle('updater:check', () => updater.check());
 ipcMain.handle('updater:install', () => updater.quitAndInstall());
+
+// Infos de débogage à copier-coller sur Discord (I12)
+ipcMain.handle('app:debugInfo', async () => {
+  let config = null;
+  try { ({ data: config } = await remote.getLauncherConfig()); } catch { /* hors ligne */ }
+  const s = settings.read();
+  return {
+    launcher: app.getVersion(),
+    pack: config?.modpack?.version ?? '?',
+    mc: config?.modpack?.mcVersion ?? '?',
+    loader: `${config?.modpack?.loader?.type ?? '?'} ${config?.modpack?.loader?.version ?? ''}`.trim(),
+    windows: os.release(),
+    ramTotalGb: Math.round(os.totalmem() / 1073741824),
+    ramGb: Number(s.ramGb) || 8,
+    theme: s.theme ?? 'dark',
+    autoJoin: s.autoJoin !== false,
+  };
+});
+
+// Notification « le serveur est de retour en ligne » (I2, opt-in, sondage léger 30 s)
+let lastServerOnline = null;
+setInterval(async () => {
+  try {
+    if (!settings.read().notifyServerBack) { lastServerOnline = null; return; }
+    const { data: config } = await remote.getLauncherConfig();
+    if (!config?.server) return;
+    const status = await getServerStatus(config.server);
+    if (lastServerOnline === false && status.online && Notification.isSupported()) {
+      new Notification({ title: 'Meytopia', body: 'Le serveur est de retour en ligne !' }).show();
+    }
+    lastServerOnline = Boolean(status.online);
+  } catch { /* silencieux */ }
+}, 30000);
 
 /* ── Cycle de vie ──────────────────────────────────────────── */
 app.whenReady().then(() => {

@@ -153,6 +153,8 @@ function refreshPlayButton() {
     btn.dataset.action = "update-install";
   } else if (ui.updater.state === "available" || ui.updater.state === "downloading") {
     set("Mise à jour requise", `Téléchargement… ${ui.updater.percent} %`, false);
+  } else if (minVersionBlocked()) {
+    set("Mise à jour requise", `Version minimale : v${ui.remoteConfig.minLauncherVersion}`, false);
   } else if (maint?.active && maint?.blockPlay !== false) {
     set("Maintenance", maint.message || "Le serveur est en maintenance", false);
   } else if (ui.remoteOffline && !ui.remoteConfig) {
@@ -223,6 +225,7 @@ async function loadRemoteConfig() {
   ui.remoteConfig = config;
   ui.remoteOffline = offline;
 
+  renderEventBanner(config);
   const banner = $("#maintenance-banner");
   if (config?.maintenance?.active) {
     banner.hidden = false;
@@ -792,11 +795,21 @@ ramSlider.addEventListener("change", () => api.settings.set({ ramGb: Number(ramS
 const autoJoinToggle = $("#autojoin-toggle");
 autoJoinToggle.addEventListener("change", () => api.settings.set({ autoJoin: autoJoinToggle.checked }));
 
+const minimizeToggle = $("#minimize-toggle");
+minimizeToggle.addEventListener("change", () => api.settings.set({ minimizeOnPlay: minimizeToggle.checked }));
+
+const notifyToggle = $("#notify-toggle");
+notifyToggle.addEventListener("change", () => api.settings.set({ notifyServerBack: notifyToggle.checked }));
+
 $("#btn-fullcheck").addEventListener("click", async () => {
   drawer.classList.add("open");
   toast("Vérification complète des fichiers…");
   const result = await api.syncOps.fullCheck();
-  toast(result.ok ? "Tous les fichiers sont vérifiés." : "Vérification incomplète — voir le volet.");
+  if (result.reason === "disk") {
+    toast(`Espace disque insuffisant : ${result.freeGb} Go libres, ~${result.neededGb} Go nécessaires.`, 8000);
+  } else {
+    toast(result.ok ? "Tous les fichiers sont vérifiés." : "Vérification incomplète — voir le volet.");
+  }
   if (result.ok && result.downloaded === 0) {
     drawerCloseTimer = setTimeout(() => drawer.classList.remove("open"), 2500);
   }
@@ -844,8 +857,67 @@ function renderUpdateLine() {
   btn.disabled = disabled;
 }
 
+/** Le launcher est-il sous la version minimale exigée à distance ? (I8) */
+function minVersionBlocked() {
+  const min = ui.remoteConfig?.minLauncherVersion;
+  if (!min || !appVersion) return false;
+  const pa = appVersion.split(".").map(Number);
+  const pb = String(min).split(".").map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0); }
+  return false;
+}
+
+/** Bannière Événement pilotée par launcher.json (I3). */
+function renderEventBanner(config) {
+  const banner = $("#event-banner");
+  const ev = config?.event;
+  const now = Date.now();
+  const within = ev && (ev.title || ev.message)
+    && (!ev.startsAt || now >= Date.parse(ev.startsAt))
+    && (!ev.endsAt || now <= Date.parse(ev.endsAt));
+  const key = ev ? (ev.id ?? `${ev.title ?? ""}|${ev.startsAt ?? ""}`) : null;
+  if (!within || key === ui.dismissedEventKey) { banner.hidden = true; return; }
+  $("#event-title").textContent = ev.title ?? "Événement";
+  $("#event-msg").textContent = ev.message ?? "";
+  if (typeof ev.color === "string" && /^#[0-9a-fA-F]{6}$/.test(ev.color)) {
+    banner.style.setProperty("--event-color", ev.color);
+  } else {
+    banner.style.removeProperty("--event-color");
+  }
+  const link = $("#event-link");
+  link.hidden = !ev.url;
+  link.onclick = ev.url ? () => api.app.openExternal(ev.url) : null;
+  $("#event-close").onclick = () => {
+    ui.dismissedEventKey = key;
+    api.settings.set({ dismissedEventKey: key });
+    banner.hidden = true;
+  };
+  banner.hidden = false;
+}
+
 window.addEventListener("online", () => { renderUpdateLine(); api.updater.check(); });
 window.addEventListener("offline", renderUpdateLine);
+
+$("#btn-debug-info").addEventListener("click", async () => {
+  const d = await api.app.debugInfo();
+  const text = [
+    `Meytopia Launcher v${d.launcher}`,
+    `Modpack ${d.pack} — Minecraft ${d.mc} (${d.loader})`,
+    `Windows ${d.windows} — RAM ${d.ramGb} Go allouée / ${d.ramTotalGb} Go au total`,
+    `Thème ${d.theme} — Connexion auto au serveur : ${d.autoJoin ? "oui" : "non"}`,
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  toast("Infos copiées — colle-les sur le Discord pour obtenir de l'aide.");
+});
 
 $("#btn-check-update").addEventListener("click", async () => {
   await api.updater.check();
@@ -908,10 +980,34 @@ async function maybeOnboard(settings, info) {
     overlay.hidden = true;
     drawer.classList.add("open");
     const result = await api.syncOps.fullCheck(); // première synchro (CDC F1)
-    toast(result.ok ? "Fichiers du modpack prêts !" : "Synchronisation incomplète — voir le volet.");
+    if (result.reason === "disk") {
+      toast(`Espace disque insuffisant : ${result.freeGb} Go libres, ~${result.neededGb} Go nécessaires.`, 8000);
+    } else {
+      toast(result.ok ? "Fichiers du modpack prêts !" : "Synchronisation incomplète — voir le volet.");
+    }
     if (result.ok) launchConfetti();
   });
 }
+
+/** « Quoi de neuf » : patchnotes de la version fraîchement installée (I13). */
+async function showWhatsNew(version) {
+  try {
+    const res = await api.changelog.list();
+    const entries = res?.data?.entries ?? res?.entries ?? [];
+    const entry = entries.find((e) => e.target === "launcher" && e.version === version);
+    if (!entry?.changes?.length) return;
+    $("#whatsnew-title").textContent = `Quoi de neuf — v${version}`;
+    const list = $("#whatsnew-list");
+    list.textContent = "";
+    for (const change of entry.changes) {
+      const li = document.createElement("li");
+      li.textContent = change;
+      list.appendChild(li);
+    }
+    $("#whatsnew-modal").hidden = false;
+  } catch { /* non bloquant */ }
+}
+$("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidden = true; });
 
 /* ── Initialisation ────────────────────────────────────────── */
 (async function init() {
@@ -931,6 +1027,7 @@ async function maybeOnboard(settings, info) {
     if (settings.lastVersion && settings.lastVersion !== v) {
       launchConfetti();
       toast(`Launcher mis à jour en v${v} !`, 5000);
+      showWhatsNew(v);
     }
     if (settings.lastVersion !== v) api.settings.set({ lastVersion: v });
   });
@@ -941,6 +1038,9 @@ async function maybeOnboard(settings, info) {
   ramSlider.value = ram;
   ramValue.textContent = `${ram} Go`;
   autoJoinToggle.checked = settings.autoJoin !== false;
+  minimizeToggle.checked = settings.minimizeOnPlay === true;
+  notifyToggle.checked = settings.notifyServerBack === true;
+  ui.dismissedEventKey = settings.dismissedEventKey ?? null;
   $("#ram-hint").textContent = `Recommandé : ${recommended} Go`;
   $("#data-dir-path").textContent = info.dataDir;
 

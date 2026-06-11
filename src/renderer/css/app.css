@@ -1101,3 +1101,19 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .update-dot.err { background: #F97316; }
 .update-dot.accent { background: var(--accent); animation: dotPulse 1.2s ease-in-out infinite; }
 @keyframes dotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── Bannière Événement (I3) ── */
+.event-banner {
+  --event-color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-color: color-mix(in srgb, var(--event-color) 55%, var(--border));
+  background: color-mix(in srgb, var(--event-color) 13%, var(--surface));
+}
+.event-banner strong { color: var(--event-color); }
+.event-banner #event-msg { flex: 1; }
+.event-actions { display: inline-flex; gap: 8px; align-items: center; }
+
+/* ── Quoi de neuf (I13) ── */
+#whatsnew-list { margin: 12px 0 4px; padding-left: 20px; display: grid; gap: 7px; color: var(--text); }

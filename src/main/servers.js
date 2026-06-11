@@ -46,8 +46,13 @@ async function ensureServerEntry(address, name) {
 
   const entries = root.value.servers.value.value;
   const target = String(address).toLowerCase();
-  const already = entries.some((entry) => String(entry?.ip?.value ?? '').toLowerCase() === target);
-  if (already) return false;
+  const existing = entries.find((entry) => String(entry?.ip?.value ?? '').toLowerCase() === target);
+  if (existing) {
+    if (String(existing.name?.value ?? '') === name) return false;
+    existing.name = { type: 'string', value: name }; // renommage piloté par launcher.json (I7)
+    fs.writeFileSync(file, nbt.writeUncompressed(root));
+    return false;
+  }
 
   entries.unshift({
     name: { type: 'string', value: name },

@@ -36,6 +36,15 @@ function clearHashCache() {
   fs.rmSync(hashCacheFile(), { force: true });
 }
 
+/** Octets libres sur le disque du dossier de jeu (null si indéterminable). */
+async function freeDiskBytes(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const s = await fs.promises.statfs(dir);
+    return Number(s.bsize) * Number(s.bavail);
+  } catch { return null; }
+}
+
 /** SHA-1 d'un fichier, via cache (taille + date inchangées → pas de re-hash, CDC §7). */
 async function cachedSha1(absPath, cache) {
   const stat = fs.statSync(absPath);
@@ -114,6 +123,17 @@ async function syncPack(manifest) {
   lastManifest = manifest;
   const { toDownload, unknown } = await diff(manifest);
   if (!toDownload.length) return { ok: true, unknown, downloaded: 0 };
+
+  // Garde-fou espace disque : on refuse de démarrer un téléchargement voué à l'échec (I11)
+  const neededBytes = toDownload.reduce((n, job) => n + (job.size ?? 0), 0) + 1024 * 1024 * 1024; // marge 1 Go
+  const free = await freeDiskBytes(getGameDir());
+  if (free !== null && free < neededBytes) {
+    return {
+      ok: false, unknown, downloaded: 0, reason: 'disk',
+      neededGb: Number((neededBytes / 1073741824).toFixed(1)),
+      freeGb: Number((free / 1073741824).toFixed(1)),
+    };
+  }
   const ok = await downloads.run(`Modpack ${manifest.version ?? ''}`.trim(), toDownload);
   if (ok) {
     // Met à jour le cache de hash pour les fichiers fraîchement écrits
