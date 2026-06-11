@@ -798,3 +798,271 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   border-radius: 18px;
   display: block;
 }
+
+/* ════════════════════════════════════════════════════════════
+   Design v1 — animations et touches communautaires
+   ════════════════════════════════════════════════════════════ */
+
+/* Transitions de page */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.page.active { animation: pageIn 0.28s ease; }
+
+/* Accueil : étincelles pixel (clin d'œil au fond du logo) */
+.hero { position: relative; z-index: 0; }
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4); }
+  50% { opacity: 0.5; transform: scale(1); }
+}
+.spark {
+  position: absolute;
+  z-index: -1;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: twinkle 5.5s ease-in-out infinite;
+}
+.spark:nth-child(even) { width: 4px; height: 4px; background: #e879f9; }
+
+/* Logo qui flotte doucement */
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.hero-logo { animation: logoFloat 7s ease-in-out infinite; }
+
+/* Salutation personnalisée */
+.hero-greeting { margin: 2px 0 0; font-size: 15px; color: var(--text); }
+
+/* Bouton JOUER : présence et impulsion */
+.play-btn {
+  position: relative;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+@keyframes playPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.45), 0 10px 30px rgba(139, 92, 246, 0.25); }
+  50% { box-shadow: 0 0 0 11px rgba(139, 92, 246, 0), 0 10px 34px rgba(139, 92, 246, 0.4); }
+}
+.play-btn:not(.disabled) { animation: playPulse 2.6s ease-in-out infinite; }
+.play-btn:not(.disabled):hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.06); }
+.play-btn:not(.disabled):active { transform: translateY(0) scale(0.98); }
+
+/* Pastille serveur : onde quand le serveur est en ligne */
+.pixel-dot { position: relative; }
+@keyframes statusPing {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent); }
+  to { box-shadow: 0 0 0 9px color-mix(in srgb, var(--success) 0%, transparent); }
+}
+.pixel-dot.online { animation: statusPing 1.8s ease-out infinite; }
+
+/* Joueurs connectés : têtes Minecraft */
+.players-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--text);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.player-chip:hover { transform: translateY(-1px); border-color: var(--accent); }
+.player-chip img { width: 22px; height: 22px; border-radius: 5px; image-rendering: pixelated; }
+
+/* Avatars Minecraft (barre latérale + liste des comptes) */
+.account-avatar, .row-avatar { position: relative; overflow: hidden; }
+.avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+/* Cartes : arrivée en cascade + relief au survol */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.news-card {
+  animation: cardIn 0.35s ease both;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.news-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); }
+.log-card, .list-row { transition: transform 0.15s ease, border-color 0.15s ease; }
+.log-card:hover { transform: translateY(-1px); }
+.list-row:hover { border-color: var(--border-strong); }
+
+/* Navigation et boutons : réactivité douce */
+.nav-item { transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease; }
+.nav-item:hover { transform: translateX(2px); }
+.ghost-btn, .primary-btn, .chip, .folder-btn {
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ghost-btn:active, .primary-btn:active, .chip:active, .folder-btn:active { transform: scale(0.96); }
+
+/* Barre de téléchargement : reflet animé */
+@keyframes barShine {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 28px 0, 0 0; }
+}
+.dl-bar-fill {
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.14) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.14) 50%, rgba(255, 255, 255, 0.14) 75%, transparent 75%),
+    linear-gradient(90deg, var(--accent-deep), var(--accent));
+  background-size: 28px 28px, 100% 100%;
+  animation: barShine 0.9s linear infinite;
+}
+
+/* Notifications : glissement d'entrée */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.toast { animation: toastIn 0.22s ease; }
+
+/* Accessibilité : préférence système « réduire les animations » respectée */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Design v2 — Discord officiel, fenêtre, thèmes, couleurs
+   ════════════════════════════════════════════════════════════ */
+
+/* A. Logo Discord officiel : forme pleine, blurple au survol */
+.discord-mark { width: 21px; height: 16px; fill: currentColor; stroke: none; }
+#btn-discord:hover { color: #5865F2; background: rgba(88, 101, 242, 0.10); }
+
+/* B. Plein écran : la barre de titre s'efface */
+body.fullscreen #titlebar { display: none; }
+body.fullscreen #layout { height: 100vh; }
+
+/* C1. Sélecteur de thème */
+.theme-opt.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* D1. Couleur d'identité par page */
+body[data-page="home"] { --page-accent: var(--accent); }
+body[data-page="news"] { --page-accent: #D946EF; }
+body[data-page="content"] { --page-accent: #10B981; }
+body[data-page="patchnotes"] { --page-accent: #F59E0B; }
+body[data-page="settings"] { --page-accent: #3B82F6; }
+
+.page-head h2::after {
+  content: "";
+  display: block;
+  width: 38px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: var(--page-accent, var(--accent));
+}
+.nav-item[data-page="news"].active { color: #D946EF; }
+.nav-item[data-page="news"].active::before { background: #D946EF; }
+.nav-item[data-page="content"].active { color: #10B981; }
+.nav-item[data-page="content"].active::before { background: #10B981; }
+.nav-item[data-page="patchnotes"].active { color: #F59E0B; }
+.nav-item[data-page="patchnotes"].active::before { background: #F59E0B; }
+.nav-item[data-page="settings"].active { color: #3B82F6; }
+.nav-item[data-page="settings"].active::before { background: #3B82F6; }
+
+.chip.active {
+  border-color: var(--page-accent, var(--accent));
+  background: color-mix(in srgb, var(--page-accent, var(--accent)) 14%, transparent);
+}
+.log-card:hover, .list-row:hover { border-color: color-mix(in srgb, var(--page-accent, var(--accent)) 55%, var(--border)); }
+
+/* D2. Fond « aurore » de l'Accueil : deux halos qui dérivent */
+@keyframes auroraA {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(60px, 36px) scale(1.15); }
+}
+@keyframes auroraB {
+  from { transform: translate(0, 0) scale(1.1); }
+  to { transform: translate(-70px, -30px) scale(0.95); }
+}
+.hero::before, .hero::after {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  width: 430px;
+  height: 430px;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(64px);
+}
+.hero::before {
+  top: -8%;
+  left: 6%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 34%, transparent), transparent 65%);
+  animation: auroraA 18s ease-in-out infinite alternate;
+}
+.hero::after {
+  bottom: -6%;
+  right: 4%;
+  background: radial-gradient(circle, rgba(217, 70, 239, 0.22), transparent 65%);
+  animation: auroraB 23s ease-in-out infinite alternate;
+}
+
+/* D3. Bouton JOUER : dégradé vivant + balayage lumineux */
+.play-btn {
+  overflow: hidden;
+  background-image: linear-gradient(120deg, var(--accent-deep), var(--accent), #D946EF, var(--accent));
+  background-size: 240% 240%;
+}
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.play-btn:not(.disabled) {
+  animation: playPulse 2.6s ease-in-out infinite, gradientShift 9s ease infinite;
+}
+@keyframes shineSweep {
+  from { transform: translateX(-130%) skewX(-18deg); }
+  to { transform: translateX(160%) skewX(-18deg); }
+}
+.play-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.28) 50%, transparent 68%);
+  transform: translateX(-130%) skewX(-18deg);
+  pointer-events: none;
+}
+.play-btn:not(.disabled):hover::before { animation: shineSweep 0.9s ease; }
+
+/* D4. Ping coloré selon la latence + pulsation du compteur */
+#st-ping.ping-good { color: var(--success); }
+#st-ping.ping-mid { color: #EAB308; }
+#st-ping.ping-bad { color: #F97316; }
+@keyframes statPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.22); color: var(--accent); }
+  100% { transform: scale(1); }
+}
+#st-players { display: inline-block; }
+#st-players.stat-pop { animation: statPop 0.45s ease; }
+
+/* D6. Confettis */
+.confetti-piece {
+  position: fixed;
+  top: -14px;
+  width: 8px;
+  height: 13px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 130;
+}

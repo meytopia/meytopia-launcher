@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('meytopia', {
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     close: () => ipcRenderer.send('window:close'),
+    maximizeToggle: () => ipcRenderer.send('window:maximize-toggle'),
+    fullscreenToggle: () => ipcRenderer.send('window:fullscreen-toggle'),
+    onState: on('window:state'),
   },
   app: {
     version: () => ipcRenderer.invoke('app:version'),

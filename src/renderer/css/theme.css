@@ -94,3 +94,21 @@ svg {
     transition: none !important;
   }
 }
+
+/* ── Thème clair violet (design v2 — C1) ── */
+html[data-theme="light"] {
+  --bg: #F3F0FA;
+  --surface: #FFFFFF;
+  --surface-high: #F8F6FD;
+  --border: #E5DFF4;
+  --border-strong: #D4C9EE;
+  --text: #241B3A;
+  --text-dim: #6E6488;
+  --accent: #7C3AED;
+  --accent-hover: #6D28D9;
+  --accent-deep: #9D6BFF;
+  --accent-soft: rgba(124, 58, 237, 0.10);
+  --success: #15803D;
+  --warning: #B45309;
+  --error: #DC2626;
+}

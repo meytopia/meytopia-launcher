@@ -66,6 +66,7 @@ const ui = {
 /* ── Navigation ────────────────────────────────────────────── */
 function showPage(id) {
   ui.page = id;
+  document.body.dataset.page = id;
   $$(".page").forEach((p) => p.classList.toggle("active", p.id === `page-${id}`));
   $$(".nav-item[data-page]").forEach((b) => b.classList.toggle("active", b.dataset.page === id));
   $("#content").scrollTop = 0;
@@ -79,6 +80,58 @@ $$(".nav-item[data-page]").forEach((btn) => btn.addEventListener("click", () => 
 /* ── Fenêtre ───────────────────────────────────────────────── */
 $("#btn-min").addEventListener("click", () => api.window.minimize());
 $("#btn-close").addEventListener("click", () => api.window.close());
+$("#btn-max").addEventListener("click", () => api.window.maximizeToggle());
+$("#titlebar").addEventListener("dblclick", (event) => {
+  if (event.target.closest("button")) return;
+  api.window.maximizeToggle();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "F11") { event.preventDefault(); api.window.fullscreenToggle(); }
+});
+api.window.onState(({ maximized, fullscreen }) => {
+  $("#ico-max").hidden = maximized;
+  $("#ico-restore").hidden = !maximized;
+  $("#btn-max").title = maximized ? "Restaurer" : "Agrandir";
+  document.body.classList.toggle("fullscreen", fullscreen);
+});
+
+/* ── Thème sombre / clair / système (C1) ───────────────────── */
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+let themePref = "dark";
+function applyTheme(pref) {
+  themePref = pref;
+  const resolved = pref === "system" ? (systemThemeQuery.matches ? "light" : "dark") : pref;
+  document.documentElement.dataset.theme = resolved;
+  $$(".theme-opt").forEach((b) => b.classList.toggle("active", b.dataset.themeVal === pref));
+}
+systemThemeQuery.addEventListener("change", () => { if (themePref === "system") applyTheme("system"); });
+$$(".theme-opt").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    applyTheme(btn.dataset.themeVal);
+    api.settings.set({ theme: btn.dataset.themeVal });
+  })
+);
+
+/* ── Confettis (D6) ────────────────────────────────────────── */
+function launchConfetti() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["#8B5CF6", "#D946EF", "#10B981", "#F59E0B", "#3B82F6", "#FFFFFF"];
+  for (let i = 0; i < 90; i++) {
+    const piece = document.createElement("span");
+    piece.className = "confetti-piece";
+    piece.style.left = `${(Math.random() * 100).toFixed(1)}vw`;
+    piece.style.background = colors[i % colors.length];
+    document.body.appendChild(piece);
+    const fall = piece.animate(
+      [
+        { transform: "translateY(0) rotate(0deg)", opacity: 1 },
+        { transform: `translateY(${72 + Math.random() * 26}vh) rotate(${380 + Math.random() * 520}deg)`, opacity: 0 },
+      ],
+      { duration: 1400 + Math.random() * 1200, easing: "cubic-bezier(.2,.7,.3,1)", delay: Math.random() * 260 },
+    );
+    fall.onfinish = () => piece.remove();
+  }
+}
 
 /* ── Bouton JOUER : machine à états (CDC F3, F7, F14, F16) ── */
 function refreshPlayButton() {
@@ -180,6 +233,16 @@ async function loadRemoteConfig() {
     banner.hidden = true;
   }
 
+  // Accent global pilotable depuis meytopia-data (evenements, saisons) — D5
+  const remoteAccent = config?.theme?.accent;
+  if (typeof remoteAccent === "string" && /^#[0-9a-fA-F]{6}$/.test(remoteAccent)) {
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty("--accent", remoteAccent);
+    rootStyle.setProperty("--accent-hover", `color-mix(in srgb, ${remoteAccent} 82%, white)`);
+    rootStyle.setProperty("--accent-deep", `color-mix(in srgb, ${remoteAccent} 78%, black)`);
+    rootStyle.setProperty("--accent-soft", `color-mix(in srgb, ${remoteAccent} 14%, transparent)`);
+  }
+
   if (config?.modpack) {
     const loader = config.modpack.loader?.type ?? "";
     $("#hero-sub").textContent =
@@ -203,9 +266,21 @@ function renderStatus(status) {
   dot.classList.toggle("online", Boolean(status.online));
   dot.classList.toggle("offline", !status.online);
   $("#st-state").textContent = status.online ? "En ligne" : "Hors ligne";
-  $("#st-players").textContent = status.online ? `${status.playersOnline}\u2009/\u2009${status.playersMax}` : "—\u2009/\u2009—";
+  const playersEl = $("#st-players");
+  const playersText = status.online ? `${status.playersOnline}\u2009/\u2009${status.playersMax}` : "—\u2009/\u2009—";
+  if (status.online && playersEl.textContent !== playersText && playersEl.textContent.trim() !== "") {
+    playersEl.classList.remove("stat-pop");
+    void playersEl.offsetWidth; // relance l'animation
+    playersEl.classList.add("stat-pop");
+  }
+  playersEl.textContent = playersText;
   $("#st-version").textContent = status.online ? status.version ?? "—" : "—";
-  $("#st-ping").textContent = status.online ? `${status.ms} ms` : "—";
+  const pingEl = $("#st-ping");
+  pingEl.textContent = status.online ? `${status.ms} ms` : "—";
+  pingEl.classList.remove("ping-good", "ping-mid", "ping-bad");
+  if (status.online) {
+    pingEl.classList.add(status.ms < 60 ? "ping-good" : status.ms < 120 ? "ping-mid" : "ping-bad");
+  }
 
   const toggle = $("#players-toggle");
   const list = $("#players-list");
@@ -213,7 +288,7 @@ function renderStatus(status) {
     toggle.disabled = false;
     toggle.textContent = playersVisible ? "Masquer les joueurs" : "Voir les joueurs connectés";
     list.hidden = !playersVisible;
-    list.textContent = status.players.length ? status.players.join(", ") : "Personne en ligne pour le moment.";
+    renderPlayerChips(list, status.players);
   } else {
     toggle.disabled = true;
     toggle.textContent = status.online ? "Liste des joueurs indisponible (query désactivé)" : "Voir les joueurs connectés";
@@ -296,10 +371,12 @@ async function loadNews() {
     }
   }, { threshold: 0.4 });
 
+  let stagger = 0;
   for (const item of sorted) {
     const card = document.createElement("article");
     card.className = `news-card${read.has(item.id) ? "" : " unread"}`;
     card.dataset.id = item.id;
+    card.style.animationDelay = `${Math.min(stagger++ * 55, 440)}ms`;
     if (item.accent) card.style.setProperty("--card-accent", item.accent);
     const dateText = new Date(item.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
     card.innerHTML = `
@@ -495,7 +572,10 @@ function onPlayClickForce() {
 
 /* ── Volet Téléchargements (CDC F10) ───────────────────────── */
 const drawer = $("#drawer");
-$("#btn-drawer").addEventListener("click", () => drawer.classList.toggle("open"));
+$("#btn-drawer").addEventListener("click", () => {
+  clearTimeout(drawerCloseTimer);
+  drawer.classList.toggle("open");
+});
 $("#drawer-close").addEventListener("click", () => drawer.classList.remove("open"));
 $("#dl-pause").addEventListener("click", () => api.downloads.pause());
 $("#dl-resume").addEventListener("click", () => api.downloads.resume());
@@ -505,8 +585,19 @@ $("#dl-retry").addEventListener("click", async () => {
 });
 
 let drawerAutoOpened = false;
+let drawerCloseTimer = null;
+let drawerWasActive = false;
 api.downloads.onUpdate((snapshot) => {
   ui.downloads = snapshot;
+  // Fermeture automatique : 4 s apres la fin d'une file (sauf interruption)
+  if (snapshot.active || snapshot.interrupted) {
+    clearTimeout(drawerCloseTimer);
+    drawerCloseTimer = null;
+  } else if (drawerWasActive && drawer.classList.contains("open")) {
+    clearTimeout(drawerCloseTimer);
+    drawerCloseTimer = setTimeout(() => drawer.classList.remove("open"), 4000);
+  }
+  drawerWasActive = snapshot.active;
   const active = snapshot.active || snapshot.interrupted;
   $("#drawer-dot").hidden = !snapshot.active;
   $("#dl-empty").hidden = active || snapshot.files.length > 0;
@@ -547,6 +638,67 @@ api.downloads.onUpdate((snapshot) => {
 /* ── Comptes Microsoft (CDC F2) ────────────────────────────── */
 const avatarLetter = (name) => (name || "?").charAt(0).toUpperCase();
 
+/** Avatar Minecraft : la tête du joueur par-dessus l'initiale (repli automatique hors ligne). */
+function setMcAvatar(el, account) {
+  el.textContent = account ? avatarLetter(account.name) : "";
+  if (!account?.uuid && !account?.name) return;
+  const img = document.createElement("img");
+  img.className = "avatar-img";
+  img.alt = "";
+  img.src = account.uuid
+    ? `https://crafatar.com/avatars/${encodeURIComponent(account.uuid)}?size=64&overlay`
+    : `https://mc-heads.net/avatar/${encodeURIComponent(account.name)}/64`;
+  img.addEventListener("error", () => img.remove());
+  el.appendChild(img);
+}
+
+/** Joueurs connectés : chips avec leur tête Minecraft. */
+function renderPlayerChips(container, players) {
+  container.textContent = "";
+  if (!players.length) {
+    container.textContent = "Personne en ligne pour le moment — sois le premier !";
+    return;
+  }
+  for (const name of players) {
+    const chip = document.createElement("span");
+    chip.className = "player-chip";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = `https://mc-heads.net/avatar/${encodeURIComponent(name)}/24`;
+    img.addEventListener("error", () => img.remove());
+    const label = document.createElement("span");
+    label.textContent = name;
+    chip.append(img, label);
+    container.appendChild(chip);
+  }
+}
+
+/** Salutation personnalisée de l'Accueil. */
+function updateGreeting() {
+  const el = $("#hero-greeting");
+  if (!el) return;
+  const active = ui.accounts.find((a) => a.active);
+  const h = new Date().getHours();
+  const hello = h < 6 ? "Bonne nuit" : h < 12 ? "Bonjour" : h < 18 ? "Bon après-midi" : "Bonsoir";
+  el.textContent = active
+    ? `${hello} ${active.name}, prêt pour l'aventure ?`
+    : `${hello} ! Connecte un compte pour rejoindre l'aventure.`;
+}
+
+/** Étincelles pixel discrètes sur l'Accueil (clin d'œil au fond du logo). */
+function injectSparks() {
+  const hero = document.querySelector(".hero");
+  if (!hero || hero.querySelector(".spark")) return;
+  for (let i = 0; i < 12; i++) {
+    const spark = document.createElement("span");
+    spark.className = "spark";
+    spark.style.left = `${(Math.random() * 96 + 2).toFixed(1)}%`;
+    spark.style.top = `${(Math.random() * 92 + 4).toFixed(1)}%`;
+    spark.style.animationDelay = `${(Math.random() * 6).toFixed(2)}s`;
+    hero.appendChild(spark);
+  }
+}
+
 function renderAccounts(list) {
   ui.accounts = list;
   const activeAny = list.find((a) => a.active) || null;
@@ -555,7 +707,7 @@ function renderAccounts(list) {
   $("#account-hint").textContent = activeAny
     ? (activeAny.needsRelogin ? "Reconnexion requise" : "Compte actif")
     : (list.length ? "Aucun compte actif" : "Aucun compte");
-  $("#account-avatar").textContent = activeAny ? avatarLetter(activeAny.name) : "";
+  setMcAvatar($("#account-avatar"), activeAny);
 
   const wrap = $("#accounts-list");
   wrap.textContent = "";
@@ -567,7 +719,7 @@ function renderAccounts(list) {
     row.className = "account-row";
     const avatar = document.createElement("div");
     avatar.className = "row-avatar";
-    avatar.textContent = avatarLetter(account.name);
+    setMcAvatar(avatar, account);
     const meta = document.createElement("div");
     meta.className = "row-meta";
     const name = document.createElement("span");
@@ -602,6 +754,7 @@ function renderAccounts(list) {
     row.append(avatar, meta, actions);
     wrap.appendChild(row);
   });
+  updateGreeting();
   refreshPlayButton();
 }
 
@@ -640,6 +793,9 @@ $("#btn-fullcheck").addEventListener("click", async () => {
   toast("Vérification complète des fichiers…");
   const result = await api.syncOps.fullCheck();
   toast(result.ok ? "Tous les fichiers sont vérifiés." : "Vérification incomplète — voir le volet.");
+  if (result.ok && result.downloaded === 0) {
+    drawerCloseTimer = setTimeout(() => drawer.classList.remove("open"), 2500);
+  }
 });
 
 $("#btn-migrate").addEventListener("click", async () => {
@@ -710,18 +866,28 @@ async function maybeOnboard(settings, info) {
     drawer.classList.add("open");
     const result = await api.syncOps.fullCheck(); // première synchro (CDC F1)
     toast(result.ok ? "Fichiers du modpack prêts !" : "Synchronisation incomplète — voir le volet.");
+    if (result.ok) launchConfetti();
   });
 }
 
 /* ── Initialisation ────────────────────────────────────────── */
 (async function init() {
-  api.app.version().then((v) => { $("#app-version").textContent = `v${v}`; });
-
   const [settings, info, accountList] = await Promise.all([
     api.settings.get(),
     api.app.systemInfo(),
     api.accounts.list(),
   ]);
+
+  applyTheme(settings.theme ?? "dark");
+
+  api.app.version().then((v) => {
+    $("#app-version").textContent = `v${v}`;
+    if (settings.lastVersion && settings.lastVersion !== v) {
+      launchConfetti();
+      toast(`Launcher mis à jour en v${v} !`, 5000);
+    }
+    if (settings.lastVersion !== v) api.settings.set({ lastVersion: v });
+  });
 
   applyRamBounds(ramSlider, info.totalRamGb);
   const recommended = Math.min(12, Math.max(4, Math.floor(info.totalRamGb / 2)));
@@ -732,6 +898,7 @@ async function maybeOnboard(settings, info) {
   $("#data-dir-path").textContent = info.dataDir;
 
   renderAccounts(accountList);
+  injectSparks();
   await loadRemoteConfig();
   refreshStatus();
   refreshNewsBadge();

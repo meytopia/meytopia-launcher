@@ -2,7 +2,7 @@
 // Meytopia Launcher — Processus principal
 // Réfère au cahier des charges : §3.1 (architecture), §5.2 (fenêtre)
 // ============================================================
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } = require('electron');
 const path = require('path');
 const os = require('os');
 const accounts = require('./accounts');
@@ -43,13 +43,15 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+  const themePref = settings.read().theme ?? 'dark';
+  const isLight = themePref === 'light' || (themePref === 'system' && !nativeTheme.shouldUseDarkColors);
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 768,
     minWidth: 1100,
     minHeight: 700,
     frame: false,
-    backgroundColor: '#120D1F',
+    backgroundColor: isLight ? '#F3F0FA' : '#120D1F',
     icon: path.join(__dirname, '..', 'renderer', 'assets', 'logo.png'),
     show: false,
     webPreferences: {
@@ -74,12 +76,28 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Etat de la fenetre (agrandie / plein ecran) pour l'interface (B1, B2)
+  const sendWindowState = () => emitToRenderer('window:state', {
+    maximized: mainWindow?.isMaximized() ?? false,
+    fullscreen: mainWindow?.isFullScreen() ?? false,
+  });
+  ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'].forEach((event) =>
+    mainWindow.on(event, sendWindowState));
+
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 /* ── IPC : fenêtre ──────────────────────────────────────────── */
 ipcMain.on('window:minimize', () => mainWindow?.minimize());
 ipcMain.on('window:close', () => mainWindow?.close());
+ipcMain.on('window:maximize-toggle', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
+ipcMain.on('window:fullscreen-toggle', () => {
+  mainWindow?.setFullScreen(!mainWindow.isFullScreen());
+});
 
 /* ── IPC : application / système ───────────────────────────── */
 ipcMain.handle('app:version', () => app.getVersion());

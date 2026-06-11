@@ -25,6 +25,10 @@
       <button id="btn-min" class="tb-btn" title="Réduire">
         <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
       </button>
+      <button id="btn-max" class="tb-btn" title="Agrandir">
+        <svg id="ico-max" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+        <svg id="ico-restore" viewBox="0 0 24 24" hidden><path d="M9 9.5h8.5V18H9zM6.5 14.5v-8H15"/></svg>
+      </button>
       <button id="btn-close" class="tb-btn tb-close" title="Fermer">
         <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
@@ -60,7 +64,7 @@
       <div class="sidebar-spacer"></div>
 
       <button id="btn-discord" class="nav-item nav-secondary">
-        <svg viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4z"/></svg>
+        <svg class="discord-mark" viewBox="0 0 127.14 96.36"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
         <span>Discord</span>
       </button>
       <div class="account-chip">
@@ -88,6 +92,7 @@
         <div class="hero">
           <p class="eyebrow">Serveur communautaire moddé</p>
           <img class="hero-logo" src="assets/logo.png" alt="Meytopia" />
+          <p class="hero-greeting" id="hero-greeting"></p>
           <p class="hero-sub" id="hero-sub">Modpack officiel</p>
 
           <button id="btn-play" class="play-btn">
@@ -186,6 +191,21 @@
           <div id="accounts-list"></div>
           <button id="btn-add-account" class="ghost-btn">Ajouter un compte Microsoft</button>
           <p class="setting-hint account-note">Connexion via la fenêtre officielle Microsoft — le compte doit posséder Minecraft.</p>
+        </div>
+
+        <div class="panel">
+          <p class="eyebrow">Apparence</p>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Thème</span>
+              <span class="setting-hint">Le mode Système suit le réglage de Windows</span>
+            </div>
+            <div class="btn-group" id="theme-choice">
+              <button class="ghost-btn theme-opt" data-theme-val="dark">Sombre</button>
+              <button class="ghost-btn theme-opt" data-theme-val="light">Clair</button>
+              <button class="ghost-btn theme-opt" data-theme-val="system">Système</button>
+            </div>
+          </div>
         </div>
 
         <div class="panel">
