@@ -32,8 +32,11 @@ function registerDetected(relPaths) {
       changed = true;
     }
   }
-  // Purge les entrées dont le fichier a disparu
-  const filtered = tracked.filter((t) => fs.existsSync(path.join(getGameDir(), t.path)));
+  // Purge : fichiers disparus + anciennes détections dans config/ (le jeu
+  // génère ces fichiers lui-même, ils n'ont rien à faire dans « Mes ajouts »)
+  const filtered = tracked.filter((t) =>
+    fs.existsSync(path.join(getGameDir(), t.path)) &&
+    !(t.source === 'detected' && t.path.startsWith('config/')));
   if (changed || filtered.length !== tracked.length) writeTracked(filtered);
   return filtered;
 }

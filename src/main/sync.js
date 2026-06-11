@@ -10,6 +10,9 @@ const { getGameDir, getLauncherDir } = require('./paths');
 const downloads = require('./downloads');
 
 const MANAGED_DIRS = ['mods', 'config', 'resourcepacks', 'shaderpacks']; // CDC §6.2
+// Détection « hors modpack » : config/ exclu, car le jeu et les mods y
+// génèrent leurs fichiers en permanence — ce serait du bruit pour le joueur.
+const DETECT_DIRS = ['mods', 'resourcepacks', 'shaderpacks'];
 
 const hashCacheFile = () => path.join(getLauncherDir(), 'cache', 'hashes.json');
 let lastManifest = null; // pour « Relancer » après interruption
@@ -93,7 +96,7 @@ async function diff(manifest) {
 
   // Fichiers hors modpack : signalés, JAMAIS supprimés (CDC F5)
   const unknown = [];
-  for (const dir of MANAGED_DIRS) {
+  for (const dir of DETECT_DIRS) {
     for (const rel of listFiles(dir)) {
       if (!manifestPaths.has(rel)) unknown.push(rel);
     }
