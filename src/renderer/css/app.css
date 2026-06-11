@@ -775,3 +775,26 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 .primary-btn.danger { background: var(--error); }
 .primary-btn.danger:hover { background: color-mix(in srgb, var(--error) 82%, white); }
 .primary-btn:disabled { opacity: 0.6; cursor: wait; }
+
+/* ── Logo officiel ── */
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: block;
+}
+.hero-logo {
+  width: min(250px, 38vh);
+  height: auto;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 44px rgba(139, 92, 246, 0.32);
+  display: block;
+}
+.ob-logo {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  display: block;
+}
