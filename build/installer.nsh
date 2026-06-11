@@ -1,8 +1,12 @@
 ; ============================================================
 ; Meytopia Launcher — Désinstallation sans trace (CDC + demande)
-; Exécuté par le désinstalleur NSIS (Windows "Applications" ou
-; bouton du launcher) : supprime aussi les données du jeu.
+; Exécuté par le désinstalleur NSIS. La suppression des données
+; ne s'applique QU'À une vraie désinstallation : pendant une
+; mise à jour (drapeau --updated), tout est préservé — réglages,
+; comptes, modpack.
 ; ============================================================
 !macro customUnInstall
-  RMDir /r "$APPDATA\.meytopia"
+  ${ifNot} ${isUpdated}
+    RMDir /r "$APPDATA\.meytopia"
+  ${endIf}
 !macroend

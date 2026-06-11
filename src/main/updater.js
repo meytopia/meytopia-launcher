@@ -47,7 +47,8 @@ function check() {
 
 /** « Redémarrer et installer » (CDC F3). */
 function quitAndInstall() {
-  if (autoUpdater && status.state === 'ready') autoUpdater.quitAndInstall();
+  // Installation silencieuse + relance automatique : pas de fenêtre d'installeur
+  if (autoUpdater && status.state === 'ready') autoUpdater.quitAndInstall(true, true);
 }
 
 module.exports = { bindEmitter, init, check, quitAndInstall, getStatus, updateRequired };
