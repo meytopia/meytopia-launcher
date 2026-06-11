@@ -8,7 +8,7 @@ const { app } = require('electron');
 let emitToRenderer = () => {};
 function bindEmitter(fn) { emitToRenderer = fn; }
 
-let status = { state: 'none', percent: 0 }; // none | available | downloading | ready | error
+let status = { state: 'none', percent: 0 }; // none | checking | available | downloading | ready | error | dev
 const getStatus = () => status;
 const setStatus = (next) => { status = { ...status, ...next }; emitToRenderer('updater:status', status); };
 
@@ -18,19 +18,27 @@ const updateRequired = () => ['available', 'downloading', 'ready'].includes(stat
 let autoUpdater = null;
 
 function init() {
-  if (!app.isPackaged) return; // en développement : rien à mettre à jour
+  if (!app.isPackaged) { status = { state: 'dev' }; return; } // en développement : rien à mettre à jour
 
   ({ autoUpdater } = require('electron-updater'));
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', () => setStatus({ state: 'available', percent: 0 }));
+  autoUpdater.on('checking-for-update', () => {
+    if (!updateRequired()) setStatus({ state: 'checking' });
+  });
+  autoUpdater.on('update-available', (info) => setStatus({ state: 'available', percent: 0, newVersion: info?.version ?? null, checkError: false }));
   autoUpdater.on('download-progress', (p) => setStatus({ state: 'downloading', percent: Math.floor(p.percent) }));
   autoUpdater.on('update-downloaded', () => setStatus({ state: 'ready', percent: 100 }));
-  autoUpdater.on('update-not-available', () => setStatus({ state: 'none', percent: 0 }));
-  autoUpdater.on('error', () => setStatus({ state: status.state === 'none' ? 'none' : 'error' }));
+  autoUpdater.on('update-not-available', () => setStatus({ state: 'none', percent: 0, newVersion: null, checkedAt: Date.now(), checkError: false }));
+  autoUpdater.on('error', () => {
+    if (status.state === 'none' || status.state === 'checking') setStatus({ state: 'none', checkError: true });
+    else setStatus({ state: 'error' });
+  });
 
   autoUpdater.checkForUpdates().catch(() => {});
+  // Re-vérification périodique : un launcher laissé ouvert reste informé
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 30 * 60 * 1000);
 }
 
 function check() {

@@ -1092,3 +1092,12 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 }
 .switch input:checked + .switch-track { background: var(--accent); border-color: var(--accent); }
 .switch input:checked + .switch-track::after { transform: translateX(18px); background: #fff; }
+
+/* ── État des mises à jour (À propos) ── */
+.update-line { display: inline-flex; align-items: center; gap: 7px; }
+.update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+.update-dot.ok { background: var(--success); }
+.update-dot.warn { background: #EAB308; animation: dotPulse 1.2s ease-in-out infinite; }
+.update-dot.err { background: #F97316; }
+.update-dot.accent { background: var(--accent); animation: dotPulse 1.2s ease-in-out infinite; }
+@keyframes dotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

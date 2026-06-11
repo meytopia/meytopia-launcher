@@ -206,6 +206,7 @@ api.game.onState((payload) => {
 
 api.updater.onStatus((status) => {
   ui.updater = status;
+  renderUpdateLine();
   if (status.state === "ready") toast("Mise à jour du launcher prête — clique sur Redémarrer.");
   refreshPlayButton();
 });
@@ -807,6 +808,45 @@ $("#btn-migrate").addEventListener("click", async () => {
   if (!result.ok && result.reason !== "cancelled") toast(`Migration impossible : ${result.reason}`, 6000);
 });
 
+let appVersion = "";
+
+/** Ligne d'état des mises à jour (À propos) : à jour / en cours / hors ligne… */
+function renderUpdateLine() {
+  const dot = $("#update-dot");
+  const text = $("#update-text");
+  const btn = $("#btn-check-update");
+  if (!dot || !text) return;
+  const u = ui.updater ?? {};
+  let cls = "idle";
+  let msg = "En attente de vérification…";
+  let disabled = false;
+  if (!navigator.onLine) {
+    msg = "Hors ligne — vérification impossible";
+    disabled = true;
+  } else if (u.state === "dev") {
+    msg = "Indisponible en mode développement";
+    disabled = true;
+  } else if (u.state === "checking") {
+    cls = "warn"; msg = "Vérification en cours…"; disabled = true;
+  } else if (u.state === "available" || u.state === "downloading") {
+    cls = "warn"; msg = `Mise à jour ${u.newVersion ? `v${u.newVersion} ` : ""}trouvée — téléchargement ${u.percent ?? 0} %`;
+  } else if (u.state === "ready") {
+    cls = "accent"; msg = `Mise à jour ${u.newVersion ? `v${u.newVersion} ` : ""}prête — redémarre pour l'installer`;
+  } else if (u.state === "error") {
+    cls = "err"; msg = "Erreur de téléchargement — nouvel essai au prochain démarrage";
+  } else if (u.checkError) {
+    cls = "err"; msg = "Vérification impossible — GitHub injoignable";
+  } else if (u.checkedAt) {
+    cls = "ok"; msg = `Vous êtes sur la dernière version${appVersion ? ` (v${appVersion})` : ""}`;
+  }
+  dot.className = `update-dot ${cls}`;
+  text.textContent = msg;
+  btn.disabled = disabled;
+}
+
+window.addEventListener("online", () => { renderUpdateLine(); api.updater.check(); });
+window.addEventListener("offline", renderUpdateLine);
+
 $("#btn-check-update").addEventListener("click", async () => {
   await api.updater.check();
   toast("Recherche de mise à jour lancée.");
@@ -882,9 +922,12 @@ async function maybeOnboard(settings, info) {
   ]);
 
   applyTheme(settings.theme ?? "dark");
+  api.updater.status().then((s) => { ui.updater = s; renderUpdateLine(); refreshPlayButton(); });
 
   api.app.version().then((v) => {
+    appVersion = v;
     $("#app-version").textContent = `v${v}`;
+    renderUpdateLine();
     if (settings.lastVersion && settings.lastVersion !== v) {
       launchConfetti();
       toast(`Launcher mis à jour en v${v} !`, 5000);
