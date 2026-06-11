@@ -10,6 +10,7 @@ const remote = require('./remote');
 const sync = require('./sync');
 const content = require('./content');
 const accounts = require('./accounts');
+const servers = require('./servers');
 const settings = require('./settings');
 
 let emitToRenderer = () => {};
@@ -68,7 +69,19 @@ async function play() {
     return { ok: false, reason: 'blocked' };
   }
 
-  // 5) Lancement : Java officiel Mojang + loader, gérés par la lib (CDC D7, D9, F4, F7)
+  // 5) Connexion directe + serveur enregistré dans le multijoueur
+  let gameArgs = [];
+  try {
+    const address = await servers.joinAddress(config.server ?? {});
+    if (address) {
+      await servers.ensureServerEntry(address, config.server?.name ?? 'Meytopia');
+      if (settings.read().autoJoin !== false) {
+        gameArgs = ['--quickPlayMultiplayer', address]; // Quick Play officiel (MC 1.20+)
+      }
+    }
+  } catch { /* confort non bloquant : le jeu se lance quand même */ }
+
+  // 6) Lancement : Java officiel Mojang + loader, gérés par la lib (CDC D7, D9, F4, F7)
   setState('launching', 'Préparation du jeu…');
   const ramGb = Number(settings.read().ramGb) || 8;
   const modpack = config.modpack ?? {};
@@ -117,7 +130,7 @@ async function play() {
       ignored: [],
       java: { type: 'jre' }, // version déduite des manifests Mojang (CDC D7)
       JVM_ARGS: [],
-      GAME_ARGS: [],
+      GAME_ARGS: gameArgs,
       screen: {},
       memory: { min: '2G', max: `${ramGb}G` },
     });

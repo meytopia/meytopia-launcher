@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "electron-updater": "^6.3.0",
-    "minecraft-java-core": "^4.2.8"
+    "minecraft-java-core": "^4.2.8",
+    "prismarine-nbt": "^2.8.0"
   },
   "build": {
     "appId": "fr.meytopia.launcher",

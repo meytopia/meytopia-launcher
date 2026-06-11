@@ -17,6 +17,13 @@ const { getServerStatus } = require('./serverStatus');
 const { getGameDir, getLauncherDir } = require('./paths');
 const fs = require('fs');
 
+// Filet de sécurité : une promesse égarée (y compris à l'intérieur des
+// bibliothèques, ex. rafraîchissement Microsoft) ne doit jamais afficher
+// d'avertissement effrayant ni menacer l'application — on journalise, point.
+process.on('unhandledRejection', (reason) => {
+  console.warn('[promesse non geree]', reason?.message ?? reason);
+});
+
 let mainWindow = null;
 
 /** Émet un événement vers l'interface (utilisé par tous les modules). */
@@ -342,7 +349,7 @@ app.whenReady().then(() => {
   updater.init(); // vérification au démarrage (CDC F3)
 
   // Reconnexion silencieuse des sessions, sans bloquer l'ouverture (CDC F2)
-  accounts.refreshAll().then(broadcastAccounts);
+  accounts.refreshAll().then(broadcastAccounts).catch(() => broadcastAccounts());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -788,6 +788,9 @@ function applyRamBounds(slider, totalRamGb) {
 ramSlider.addEventListener("input", () => { ramValue.textContent = `${ramSlider.value} Go`; });
 ramSlider.addEventListener("change", () => api.settings.set({ ramGb: Number(ramSlider.value) }));
 
+const autoJoinToggle = $("#autojoin-toggle");
+autoJoinToggle.addEventListener("change", () => api.settings.set({ autoJoin: autoJoinToggle.checked }));
+
 $("#btn-fullcheck").addEventListener("click", async () => {
   drawer.classList.add("open");
   toast("Vérification complète des fichiers…");
@@ -894,6 +897,7 @@ async function maybeOnboard(settings, info) {
   const ram = Number(settings.ramGb) || recommended;
   ramSlider.value = ram;
   ramValue.textContent = `${ram} Go`;
+  autoJoinToggle.checked = settings.autoJoin !== false;
   $("#ram-hint").textContent = `Recommandé : ${recommended} Go`;
   $("#data-dir-path").textContent = info.dataDir;
 
