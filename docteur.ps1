@@ -30,7 +30,8 @@ try {
 
 # 2) latest.yml vs package.json
 try {
-  $yml = (Invoke-WebRequest -UseBasicParsing "https://github.com/$Owner/meytopia-launcher/releases/latest/download/latest.yml").Content
+  $resp = Invoke-WebRequest -UseBasicParsing "https://github.com/$Owner/meytopia-launcher/releases/latest/download/latest.yml"
+  $yml = if ($resp.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($resp.Content) } else { [string]$resp.Content }
   $ymlVer = ([regex]::Match($yml, 'version:\s*(\S+)')).Groups[1].Value
   $pkgVer = (Get-Content (Join-Path $PSScriptRoot "package.json") -Raw | ConvertFrom-Json).version
   if ($ymlVer -eq $pkgVer) { Line "OK" "Version distribuee = code local (v$ymlVer)" }
@@ -50,13 +51,15 @@ foreach ($name in @("launcher", "news", "changelog", "blocklist", "optional", "m
 # 4) Echantillon de fichiers du manifest reellement telechargeables
 if ($manifest -and $manifest.files.Count -gt 0) {
   $files = @($manifest.files)
-  $picks = @(0, [int]($files.Count/4), [int]($files.Count/2), [int](3*$files.Count/4), $files.Count-1) | Select-Object -Unique
+  $total = [int]$files.Count
+  $picks = @(0, [int][math]::Floor($total / 4), [int][math]::Floor($total / 2), [int][math]::Floor((3 * $total) / 4), ($total - 1)) | Select-Object -Unique
   $bad = 0
   foreach ($i in $picks) {
     try { Invoke-WebRequest -Method Head -UseBasicParsing $files[$i].url | Out-Null }
     catch { $bad++; Line "ERR" "Fichier du pack injoignable" $files[$i].path }
   }
-  if ($bad -eq 0) { Line "OK" "Fichiers du pack telechargeables ($($picks.Count) testes sur $($files.Count))" }
+  if ($picks.Count -gt 0 -and $bad -eq 0) { Line "OK" "Fichiers du pack telechargeables ($($picks.Count) testes sur $total)" }
+  elseif ($picks.Count -eq 0) { Line "WARN" "Echantillon du pack vide : rien n'a ete teste" }
 } else { Line "WARN" "Manifest vide ou illisible : fichiers du pack non testes" }
 
 # 5) SRV Minecraft
