@@ -7,8 +7,19 @@ const { Status } = require('minecraft-java-core');
 const dns = require('dns').promises;
 const { queryFullStat } = require('./query');
 
-// Petit cache (60 s) pour ne pas interroger le DNS à chaque tick de 10 s
+// Petit cache (60 s) pour ne pas interroger le DNS à chaque tick de 1 s
 let srvCache = { host: null, value: null, at: 0 };
+
+/** Garantit qu'une promesse se termine : rejet après `ms` quoi qu'il arrive. */
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`délai dépassé (${ms} ms)`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
 
 /**
  * Résout l'adresse comme le fait le client Minecraft : l'enregistrement
@@ -19,17 +30,22 @@ async function resolveMinecraftHost(host, port) {
   const now = Date.now();
   if (srvCache.host === host && now - srvCache.at < 60000) return srvCache.value;
 
-  let value = { host, port };
   try {
     const records = await dns.resolveSrv(`_minecraft._tcp.${host}`);
     if (records.length) {
       const best = records.sort((a, b) => a.priority - b.priority || b.weight - a.weight)[0];
-      value = { host: best.name, port: best.port };
+      srvCache = { host, value: { host: best.name, port: best.port }, at: now };
+      return srvCache.value;
     }
-  } catch { /* pas d'enregistrement SRV : adresse directe */ }
-
-  srvCache = { host, value, at: now };
-  return value;
+  } catch {
+    // DNS momentanément KO : on conserve la dernière résolution connue
+    if (srvCache.host === host && srvCache.value) {
+      srvCache.at = now;
+      return srvCache.value;
+    }
+  }
+  srvCache = { host, value: { host, port }, at: now };
+  return srvCache.value;
 }
 
 /**
@@ -43,8 +59,11 @@ async function getServerStatus(server) {
 
   let ping;
   try {
-    ping = await new Status(target.host, target.port).getStatus();
-  } catch {
+    // Timeout dur : la bibliothèque peut rester suspendue sur un serveur
+    // en cours de démarrage (port ouvert, protocole muet) — jamais plus de 5 s.
+    ping = await withTimeout(new Status(target.host, target.port).getStatus(), 5000);
+  } catch (err) {
+    console.warn('[statut]', err?.message ?? err);
     return { online: false };
   }
   if (!ping || ping.error) return { online: false };

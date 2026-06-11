@@ -185,6 +185,7 @@ async function loadRemoteConfig() {
     $("#hero-sub").textContent =
       `${loader.charAt(0).toUpperCase()}${loader.slice(1)} ${config.modpack.mcVersion ?? ""} · modpack ${config.modpack.version ?? ""}`.trim();
   }
+  updateStatusLabel();
   refreshPlayButton();
 }
 
@@ -227,16 +228,39 @@ $("#players-toggle").addEventListener("click", () => {
 });
 
 let statusBusy = false;
+let statusBusySince = 0;
 async function refreshStatus() {
-  if (statusBusy) return;
+  // Verrou anti-chevauchement, auto-libéré après 10 s en cas d'appel coincé
+  if (statusBusy && Date.now() - statusBusySince < 10000) return;
   statusBusy = true;
-  try { renderStatus(await api.server.status()); } catch { /* silencieux */ }
-  statusBusy = false;
+  statusBusySince = Date.now();
+  try {
+    renderStatus(await api.server.status());
+  } catch (err) {
+    console.warn("[statut]", err);
+  } finally {
+    statusBusy = false;
+  }
 }
-// Rafraîchissement uniquement quand la page Accueil est affichée et la fenêtre visible (CDC F8)
-setInterval(() => {
-  if (ui.page === "home" && !document.hidden) refreshStatus();
-}, 10000);
+// Rafraîchissement uniquement quand la page Accueil est affichée et la
+// fenêtre visible. Intervalle : 1 s par défaut, réglable à distance via
+// launcher.json → server.statusIntervalS (CDC F8 amendé).
+function statusIntervalMs() {
+  const s = Number(ui.remoteConfig?.server?.statusIntervalS);
+  return (Number.isFinite(s) && s >= 1 ? s : 1) * 1000;
+}
+function updateStatusLabel() {
+  const sec = statusIntervalMs() / 1000;
+  $("#status-refresh").textContent = sec <= 1 ? "Actualisation chaque seconde" : `Actualisation toutes les ${sec} s`;
+}
+(function statusLoop() {
+  setTimeout(() => {
+    // Pas de await ici : la replanification ne dépend jamais de la réponse,
+    // la boucle ne peut donc pas mourir sur un appel suspendu.
+    if (ui.page === "home" && !document.hidden) refreshStatus();
+    statusLoop();
+  }, statusIntervalMs());
+})();
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && ui.page === "home") refreshStatus();
 });
