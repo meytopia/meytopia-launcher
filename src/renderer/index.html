@@ -153,6 +153,7 @@
           <p class="page-desc">Tout ce qui ne vient pas du modpack : catalogue approuvé et ajouts personnels. Ces contenus sont chargés avec le jeu tant qu'ils ne sont pas bloqués.</p>
         </header>
 
+        <p class="pack-info" id="pack-info" hidden></p>
         <div class="folder-row">
           <button class="folder-btn" data-dir="mods">Ouvrir mods</button>
           <button class="folder-btn" data-dir="config">Ouvrir config</button>
@@ -258,6 +259,27 @@
               <input type="checkbox" id="notify-toggle" />
               <span class="switch-track" aria-hidden="true"></span>
             </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Réduire près de l'horloge</span>
+              <span class="setting-hint">Fermer la fenêtre la cache dans la zone de notification — le launcher continue de veiller (clic droit sur l'icône : Ouvrir, Jouer, Quitter)</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="tray-toggle" />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="setting-row friends-row">
+            <div class="setting-meta">
+              <span class="setting-name">Amis à suivre</span>
+              <span class="setting-hint">Une notification te prévient quand l'un d'eux se connecte au serveur</span>
+              <div class="friends-chips" id="friends-list"></div>
+            </div>
+            <div class="friend-add">
+              <input type="text" id="friend-input" placeholder="Pseudo Minecraft" maxlength="16" />
+              <button class="ghost-btn" id="friend-add-btn">Ajouter</button>
+            </div>
           </div>
         </div>
 
@@ -407,6 +429,28 @@
   </div>
 
   <!-- ════════ Confirmation de désinstallation complète ════════ -->
+  <div id="update-popup" class="update-popup" hidden>
+    <p class="update-popup-step" id="up-step">Mise à jour…</p>
+    <div class="ring-wrap">
+      <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+        <defs>
+          <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#8B5CF6" />
+            <stop offset="100%" stop-color="#D946EF" />
+          </linearGradient>
+        </defs>
+        <circle class="ring-dashes" cx="60" cy="60" r="56" />
+        <circle class="ring-track" cx="60" cy="60" r="46" />
+        <circle class="ring-bar" id="ring-bar" cx="60" cy="60" r="46" />
+        <g class="ring-tip-rot" id="ring-tip-rot"><circle class="ring-tip" cx="60" cy="14" r="5" /></g>
+        <path class="ring-check" id="ring-check" pathLength="60" d="M40 62l14 13 26-28" />
+      </svg>
+      <div class="ring-center"><span id="up-percent">0</span><small>%</small></div>
+    </div>
+    <p class="update-popup-meta" id="up-meta">—</p>
+    <button class="primary-btn" id="up-restart" hidden>Redémarrer</button>
+  </div>
+
   <div id="whatsnew-modal" class="modal-overlay" hidden>
     <div class="modal">
       <h3 id="whatsnew-title">Quoi de neuf</h3>

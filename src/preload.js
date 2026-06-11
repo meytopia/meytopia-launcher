@@ -14,10 +14,12 @@ contextBridge.exposeInMainWorld('meytopia', {
     maximizeToggle: () => ipcRenderer.send('window:maximize-toggle'),
     fullscreenToggle: () => ipcRenderer.send('window:fullscreen-toggle'),
     onState: on('window:state'),
+    onTrayPlay: on('tray:play'),
   },
   app: {
     version: () => ipcRenderer.invoke('app:version'),
     debugInfo: () => ipcRenderer.invoke('app:debugInfo'),
+    packInfo: () => ipcRenderer.invoke('pack:info'),
     systemInfo: () => ipcRenderer.invoke('system:info'),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     uninstall: () => ipcRenderer.invoke('app:uninstall'),

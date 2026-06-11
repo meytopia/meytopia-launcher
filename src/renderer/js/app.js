@@ -209,6 +209,7 @@ api.game.onState((payload) => {
 api.updater.onStatus((status) => {
   ui.updater = status;
   renderUpdateLine();
+  renderUpdatePopup();
   if (status.state === "ready") toast("Mise à jour du launcher prête — clique sur Redémarrer.");
   refreshPlayButton();
 });
@@ -226,6 +227,7 @@ async function loadRemoteConfig() {
   ui.remoteOffline = offline;
 
   renderEventBanner(config);
+  loadPackInfo();
   const banner = $("#maintenance-banner");
   if (config?.maintenance?.active) {
     banner.hidden = false;
@@ -801,6 +803,75 @@ minimizeToggle.addEventListener("change", () => api.settings.set({ minimizeOnPla
 const notifyToggle = $("#notify-toggle");
 notifyToggle.addEventListener("change", () => api.settings.set({ notifyServerBack: notifyToggle.checked }));
 
+const trayToggle = $("#tray-toggle");
+trayToggle.addEventListener("change", () => api.settings.set({ minimizeToTray: trayToggle.checked }));
+
+/* ── Amis à suivre (J4) ────────────────────────────────────── */
+let friendsList = [];
+function renderFriends() {
+  const wrap = $("#friends-list");
+  wrap.textContent = "";
+  for (const name of friendsList) {
+    const chip = document.createElement("span");
+    chip.className = "friend-chip";
+    const label = document.createElement("span");
+    label.textContent = name;
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.title = "Ne plus suivre";
+    del.addEventListener("click", () => {
+      friendsList = friendsList.filter((f) => f !== name);
+      api.settings.set({ friends: friendsList });
+      renderFriends();
+    });
+    chip.append(label, del);
+    wrap.appendChild(chip);
+  }
+}
+function addFriend() {
+  const input = $("#friend-input");
+  const name = input.value.trim();
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) { toast("Pseudo Minecraft invalide."); return; }
+  if (!friendsList.some((f) => f.toLowerCase() === name.toLowerCase())) {
+    friendsList = [...friendsList, name];
+    api.settings.set({ friends: friendsList });
+    renderFriends();
+  }
+  input.value = "";
+}
+$("#friend-add-btn").addEventListener("click", addFriend);
+$("#friend-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addFriend(); });
+
+/* ── Easter egg : le troupeau (L3) ─────────────────────────── */
+const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+let konamiStep = 0;
+window.addEventListener("keydown", (e) => {
+  konamiStep = e.key === KONAMI[konamiStep] ? konamiStep + 1 : (e.key === KONAMI[0] ? 1 : 0);
+  if (konamiStep === KONAMI.length) { konamiStep = 0; sheepRain(); }
+});
+function sheepRain() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < 26; i++) {
+    const sheep = document.createElement("span");
+    sheep.className = "sheep-piece";
+    sheep.textContent = "🐑";
+    sheep.style.left = `${(Math.random() * 96).toFixed(1)}vw`;
+    sheep.style.fontSize = `${Math.round(20 + Math.random() * 18)}px`;
+    document.body.appendChild(sheep);
+    const fall = sheep.animate(
+      [
+        { transform: "translateY(0) rotate(-12deg)" },
+        { transform: `translateY(105vh) rotate(${Math.round(Math.random() * 60 - 30)}deg)` },
+      ],
+      { duration: 2400 + Math.random() * 1800, easing: "ease-in", delay: Math.random() * 700 },
+    );
+    fall.onfinish = () => sheep.remove();
+  }
+  toast("Bêêê ! 🐑");
+}
+
+api.window.onTrayPlay(() => onPlayClick());
+
 $("#btn-fullcheck").addEventListener("click", async () => {
   drawer.classList.add("open");
   toast("Vérification complète des fichiers…");
@@ -854,7 +925,9 @@ function renderUpdateLine() {
   }
   dot.className = `update-dot ${cls}`;
   text.textContent = msg;
-  btn.disabled = disabled;
+  void disabled;
+  btn.disabled = true; // vérification automatique chaque minute : le bouton devient un témoin
+  btn.textContent = u.state === "dev" ? "Indisponible (dev)" : "Automatique — 1 min";
 }
 
 /** Le launcher est-il sous la version minimale exigée à distance ? (I8) */
@@ -867,18 +940,36 @@ function minVersionBlocked() {
   return false;
 }
 
-/** Bannière Événement pilotée par launcher.json (I3). */
+/** Compte à rebours lisible : « 2 j 4 h », « 3 h 05 min », « 12 min ». */
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d} j ${h} h`;
+  if (h > 0) return `${h} h ${String(m).padStart(2, "0")} min`;
+  return `${Math.max(1, m)} min`;
+}
+
+/** Bannière Événement pilotée par launcher.json (I3) + compte à rebours (J3). */
 function renderEventBanner(config) {
   const banner = $("#event-banner");
   const ev = config?.event;
+  if (!ev || (!ev.title && !ev.message)) { banner.hidden = true; return; }
   const now = Date.now();
-  const within = ev && (ev.title || ev.message)
-    && (!ev.startsAt || now >= Date.parse(ev.startsAt))
-    && (!ev.endsAt || now <= Date.parse(ev.endsAt));
-  const key = ev ? (ev.id ?? `${ev.title ?? ""}|${ev.startsAt ?? ""}`) : null;
-  if (!within || key === ui.dismissedEventKey) { banner.hidden = true; return; }
+  const start = ev.startsAt ? Date.parse(ev.startsAt) : null;
+  const end = ev.endsAt ? Date.parse(ev.endsAt) : null;
+  let phase = null;
+  if (start && now < start) phase = "pre";
+  else if ((!start || now >= start) && (!end || now <= end)) phase = "live";
+  if (!phase) { banner.hidden = true; return; }
+  const key = `${ev.id ?? `${ev.title ?? ""}|${ev.startsAt ?? ""}`}#${phase}`;
+  if (key === ui.dismissedEventKey) { banner.hidden = true; return; }
   $("#event-title").textContent = ev.title ?? "Événement";
-  $("#event-msg").textContent = ev.message ?? "";
+  const extra = phase === "pre"
+    ? ` — commence dans ${fmtCountdown(start - now)}`
+    : (end ? ` — se termine dans ${fmtCountdown(end - now)}` : "");
+  $("#event-msg").textContent = `${ev.message ?? ""}${extra}`;
   if (typeof ev.color === "string" && /^#[0-9a-fA-F]{6}$/.test(ev.color)) {
     banner.style.setProperty("--event-color", ev.color);
   } else {
@@ -894,8 +985,61 @@ function renderEventBanner(config) {
   };
   banner.hidden = false;
 }
+setInterval(() => { if (ui.remoteConfig) renderEventBanner(ui.remoteConfig); }, 30000);
 
-window.addEventListener("online", () => { renderUpdateLine(); api.updater.check(); });
+/* ── Popup de mise à jour : l'anneau Meytopia ──────────────── */
+const RING_CIRC = 289.03; // 2πr, r = 46
+function renderUpdatePopup() {
+  const pop = $("#update-popup");
+  if (!pop) return;
+  const u = ui.updater ?? {};
+  const visible = ["available", "downloading", "ready"].includes(u.state);
+  pop.hidden = !visible;
+  if (!visible) { pop.classList.remove("done"); return; }
+  const pct = u.state === "ready" ? 100 : Math.max(0, Math.min(100, u.percent ?? 0));
+  $("#ring-bar").style.strokeDashoffset = String(RING_CIRC * (1 - pct / 100));
+  $("#ring-tip-rot").style.transform = `rotate(${(pct * 3.6).toFixed(1)}deg)`;
+  $("#up-percent").textContent = String(pct);
+  const label = u.newVersion ? `v${u.newVersion}` : "du launcher";
+  if (u.state === "ready") {
+    pop.classList.add("done");
+    $("#up-step").textContent = `Mise à jour ${label} prête !`;
+    $("#up-meta").textContent = "Un clic, deux secondes, et c'est tout neuf.";
+  } else {
+    pop.classList.remove("done");
+    $("#up-step").textContent = u.state === "available"
+      ? `Préparation de la mise à jour ${label}…`
+      : `Téléchargement de la mise à jour ${label}…`;
+    const hasSpeed = (u.bytesPerSecond ?? 0) > 0;
+    const eta = hasSpeed && u.total > u.transferred
+      ? fmtDuration(Math.round((u.total - u.transferred) / u.bytesPerSecond))
+      : null;
+    $("#up-meta").textContent = hasSpeed
+      ? `${fmtSpeed(u.bytesPerSecond)}${eta ? ` · ~${eta} restantes` : ""}`
+      : "Connexion au serveur de mises à jour…";
+  }
+  $("#up-restart").hidden = u.state !== "ready";
+}
+$("#up-restart").addEventListener("click", () => api.updater.install());
+
+/** En-tête de la page Contenus : version, fichiers, taille du pack (J5). */
+async function loadPackInfo() {
+  const el = $("#pack-info");
+  if (!el) return;
+  const info = await api.app.packInfo();
+  if (!info) { el.hidden = true; return; }
+  el.textContent = `Modpack ${info.version} · ${info.count} fichiers · ${fmtBytes(info.totalBytes)}`;
+  el.hidden = false;
+}
+
+window.addEventListener("online", () => {
+  renderUpdateLine();
+  api.updater.check();
+  if (ui.downloads?.interrupted) {
+    drawer.classList.add("open");
+    toast("Connexion rétablie — clique sur Reprendre pour relancer le téléchargement.", 6000);
+  }
+});
 window.addEventListener("offline", renderUpdateLine);
 
 $("#btn-debug-info").addEventListener("click", async () => {
@@ -1018,7 +1162,7 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   ]);
 
   applyTheme(settings.theme ?? "dark");
-  api.updater.status().then((s) => { ui.updater = s; renderUpdateLine(); refreshPlayButton(); });
+  api.updater.status().then((s) => { ui.updater = s; renderUpdateLine(); renderUpdatePopup(); refreshPlayButton(); });
 
   api.app.version().then((v) => {
     appVersion = v;
@@ -1040,6 +1184,9 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   autoJoinToggle.checked = settings.autoJoin !== false;
   minimizeToggle.checked = settings.minimizeOnPlay === true;
   notifyToggle.checked = settings.notifyServerBack === true;
+  trayToggle.checked = settings.minimizeToTray === true;
+  friendsList = Array.isArray(settings.friends) ? settings.friends : [];
+  renderFriends();
   ui.dismissedEventKey = settings.dismissedEventKey ?? null;
   $("#ram-hint").textContent = `Recommandé : ${recommended} Go`;
   $("#data-dir-path").textContent = info.dataDir;

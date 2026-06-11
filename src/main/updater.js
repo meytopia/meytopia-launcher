@@ -28,7 +28,13 @@ function init() {
     if (!updateRequired()) setStatus({ state: 'checking' });
   });
   autoUpdater.on('update-available', (info) => setStatus({ state: 'available', percent: 0, newVersion: info?.version ?? null, checkError: false }));
-  autoUpdater.on('download-progress', (p) => setStatus({ state: 'downloading', percent: Math.floor(p.percent) }));
+  autoUpdater.on('download-progress', (p) => setStatus({
+    state: 'downloading',
+    percent: Math.floor(p.percent),
+    bytesPerSecond: Math.round(p.bytesPerSecond ?? 0),
+    transferred: p.transferred ?? 0,
+    total: p.total ?? 0,
+  }));
   autoUpdater.on('update-downloaded', () => setStatus({ state: 'ready', percent: 100 }));
   autoUpdater.on('update-not-available', () => setStatus({ state: 'none', percent: 0, newVersion: null, checkedAt: Date.now(), checkError: false }));
   autoUpdater.on('error', () => {
@@ -37,8 +43,8 @@ function init() {
   });
 
   autoUpdater.checkForUpdates().catch(() => {});
-  // Re-vérification périodique : un launcher laissé ouvert reste informé
-  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 30 * 60 * 1000);
+  // Vérification automatique chaque minute (fichier servi par CDN : sans risque)
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 60 * 1000);
 }
 
 function check() {

@@ -2,7 +2,7 @@
 // Meytopia Launcher — Processus principal
 // Réfère au cahier des charges : §3.1 (architecture), §5.2 (fenêtre)
 // ============================================================
-const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme, Notification, Tray, Menu, screen } = require('electron');
 const path = require('path');
 const os = require('os');
 const accounts = require('./accounts');
@@ -28,14 +28,31 @@ process.on('unhandledRejection', (reason) => {
 app.setAppUserModelId('fr.meytopia.launcher');
 
 let mainWindow = null;
+let tray = null;
+let quitting = false;
+app.on('before-quit', () => { quitting = true; });
+
+/** Icône de la zone de notification : Ouvrir / Jouer / Quitter (J8). */
+function setupTray() {
+  if (tray) return;
+  tray = new Tray(path.join(__dirname, '..', 'renderer', 'assets', 'logo.png'));
+  tray.setToolTip('Meytopia Launcher');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Ouvrir', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { label: 'Jouer', click: () => { mainWindow?.show(); mainWindow?.focus(); emitToRenderer('tray:play'); } },
+    { type: 'separator' },
+    { label: 'Quitter', click: () => app.quit() },
+  ]));
+  tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
+}
 
 /** Émet un événement vers l'interface (utilisé par tous les modules). */
 function emitToRenderer(channel, payload) {
   // Progression dans la barre des tâches Windows (I14)
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (channel === 'downloads:update') {
-      const ratio = payload?.active && payload?.totalBytes > 0
-        ? Math.min(payload.doneBytes / payload.totalBytes, 1) : -1;
+      const ratio = payload?.active && payload?.global?.totalBytes > 0
+        ? Math.min(payload.global.doneBytes / payload.global.totalBytes, 1) : -1;
       mainWindow.setProgressBar(ratio);
     } else if (channel === 'updater:status') {
       mainWindow.setProgressBar(payload?.state === 'downloading' ? Math.min((payload.percent ?? 0) / 100, 1) : -1);
@@ -65,9 +82,10 @@ if (!gotTheLock) {
 function createWindow() {
   const themePref = settings.read().theme ?? 'dark';
   const isLight = themePref === 'light' || (themePref === 'system' && !nativeTheme.shouldUseDarkColors);
+  const remembered = settings.read().windowState ?? null;
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 768,
+    width: Number.isFinite(remembered?.width) ? Math.max(1100, Math.round(remembered.width)) : 1280,
+    height: Number.isFinite(remembered?.height) ? Math.max(700, Math.round(remembered.height)) : 768,
     minWidth: 1100,
     minHeight: 700,
     frame: false,
@@ -103,6 +121,34 @@ function createWindow() {
   });
   ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'].forEach((event) =>
     mainWindow.on(event, sendWindowState));
+
+  // Fenêtre qui se souvient : position, taille, état agrandi (J7)
+  const savedState = settings.read().windowState ?? null;
+  if (Number.isFinite(savedState?.x) && Number.isFinite(savedState?.y)) {
+    const onScreen = screen.getAllDisplays().some((d) =>
+      savedState.x >= d.workArea.x - 8 && savedState.y >= d.workArea.y - 8 &&
+      savedState.x < d.workArea.x + d.workArea.width && savedState.y < d.workArea.y + d.workArea.height);
+    if (onScreen) mainWindow.setPosition(Math.round(savedState.x), Math.round(savedState.y));
+  }
+  if (savedState?.maximized) mainWindow.maximize();
+  let windowStateTimer = null;
+  const persistWindowState = () => {
+    clearTimeout(windowStateTimer);
+    windowStateTimer = setTimeout(() => {
+      if (!mainWindow) return;
+      const bounds = mainWindow.getNormalBounds();
+      settings.write({ windowState: { ...bounds, maximized: mainWindow.isMaximized() } });
+    }, 600);
+  };
+  ['resize', 'move', 'maximize', 'unmaximize'].forEach((ev) => mainWindow.on(ev, persistWindowState));
+
+  // « Réduire près de l'horloge » : fermer cache la fenêtre, le launcher veille (J8)
+  mainWindow.on('close', (event) => {
+    if (!quitting && settings.read().minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -374,18 +420,57 @@ ipcMain.handle('app:debugInfo', async () => {
   };
 });
 
-// Notification « le serveur est de retour en ligne » (I2, opt-in, sondage léger 30 s)
+// Infos du modpack pour l'en-tête de Contenus (J5)
+ipcMain.handle('pack:info', async () => {
+  try {
+    const [{ data: config }, { data: manifest }] = await Promise.all([
+      remote.getLauncherConfig(),
+      remote.getManifest(),
+    ]);
+    const files = manifest?.files ?? [];
+    if (!files.length) return null;
+    return {
+      version: config?.modpack?.version ?? manifest?.version ?? '?',
+      count: files.length,
+      totalBytes: files.reduce((n, f) => n + (f.size ?? 0), 0),
+    };
+  } catch { return null; }
+});
+
+// Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
 let lastServerOnline = null;
+let lastPlayers = null;
 setInterval(async () => {
   try {
-    if (!settings.read().notifyServerBack) { lastServerOnline = null; return; }
+    const prefs = settings.read();
+    const friends = Array.isArray(prefs.friends) ? prefs.friends : [];
+    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; return; }
     const { data: config } = await remote.getLauncherConfig();
     if (!config?.server) return;
     const status = await getServerStatus(config.server);
-    if (lastServerOnline === false && status.online && Notification.isSupported()) {
+
+    if (prefs.notifyServerBack && lastServerOnline === false && status.online && Notification.isSupported()) {
       new Notification({ title: 'Meytopia', body: 'Le serveur est de retour en ligne !' }).show();
     }
     lastServerOnline = Boolean(status.online);
+
+    const players = status.online && Array.isArray(status.players) ? status.players : null;
+    if (players && friends.length && lastPlayers && Notification.isSupported()) {
+      const own = new Set(accounts.summary().map((a) => String(a.name).toLowerCase()));
+      const before = new Set(lastPlayers.map((nick) => nick.toLowerCase()));
+      const watched = new Set(friends.map((f) => String(f).toLowerCase()));
+      const arrivals = players.filter((nick) => {
+        const low = nick.toLowerCase();
+        return watched.has(low) && !before.has(low) && !own.has(low);
+      });
+      if (arrivals.length) {
+        const body = arrivals.length === 1
+          ? `${arrivals[0]} vient de se connecter sur Meytopia !`
+          : `${arrivals.join(', ')} viennent de se connecter sur Meytopia !`;
+        new Notification({ title: 'Meytopia', body }).show();
+      }
+    }
+    if (players) lastPlayers = players;
   } catch { /* silencieux */ }
 }, 30000);
 
@@ -393,6 +478,7 @@ setInterval(async () => {
 app.whenReady().then(() => {
   accounts.load();
   createWindow();
+  setupTray();
   updater.init(); // vérification au démarrage (CDC F3)
 
   // Reconnexion silencieuse des sessions, sans bloquer l'ouverture (CDC F2)
