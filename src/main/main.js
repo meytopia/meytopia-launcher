@@ -74,6 +74,7 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
     }
   });
@@ -141,14 +142,6 @@ function createWindow() {
     }, 600);
   };
   ['resize', 'move', 'maximize', 'unmaximize'].forEach((ev) => mainWindow.on(ev, persistWindowState));
-
-  // « Réduire près de l'horloge » : fermer cache la fenêtre, le launcher veille (J8)
-  mainWindow.on('close', (event) => {
-    if (!quitting && settings.read().minimizeToTray) {
-      event.preventDefault();
-      mainWindow.hide();
-    }
-  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }

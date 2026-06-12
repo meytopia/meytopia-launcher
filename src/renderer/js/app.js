@@ -301,6 +301,17 @@ function renderStatus(status) {
     list.hidden = true;
     playersVisible = false;
   }
+
+  // Pastilles « Amis » : recalculées seulement quand la liste en ligne change
+  const next = status.online && Array.isArray(status.players)
+    ? [...new Set(status.players.map((p) => String(p).toLowerCase()))]
+    : [];
+  const key = next.sort().join(",");
+  if (key !== renderStatus._friendsKey) {
+    renderStatus._friendsKey = key;
+    onlineNames = new Set(next);
+    renderFriends();
+  }
 }
 
 $("#players-toggle").addEventListener("click", () => {
@@ -803,9 +814,6 @@ minimizeToggle.addEventListener("change", () => api.settings.set({ minimizeOnPla
 const notifyToggle = $("#notify-toggle");
 notifyToggle.addEventListener("change", () => api.settings.set({ notifyServerBack: notifyToggle.checked }));
 
-const trayToggle = $("#tray-toggle");
-trayToggle.addEventListener("change", () => api.settings.set({ minimizeToTray: trayToggle.checked }));
-
 const betaToggle = $("#beta-toggle");
 const betaCodeRow = $("#beta-code-row");
 let betaUnlockedHash = null; // empreinte du code déjà validé (settings.betaUnlocked)
@@ -853,12 +861,17 @@ $("#beta-code-input").addEventListener("keydown", (e) => { if (e.key === "Enter"
 
 /* ── Amis à suivre (J4) ────────────────────────────────────── */
 let friendsList = [];
+let onlineNames = new Set(); // joueurs actuellement en ligne (alimenté par le statut serveur)
 function renderFriends() {
   const wrap = $("#friends-list");
   wrap.textContent = "";
   for (const name of friendsList) {
     const chip = document.createElement("span");
     chip.className = "friend-chip";
+    const dot = document.createElement("span");
+    const isOn = onlineNames.has(name.toLowerCase());
+    dot.className = "friend-dot" + (isOn ? " online" : "");
+    dot.title = isOn ? "En ligne sur le serveur" : "Hors ligne";
     const label = document.createElement("span");
     label.textContent = name;
     const del = document.createElement("button");
@@ -869,7 +882,7 @@ function renderFriends() {
       api.settings.set({ friends: friendsList });
       renderFriends();
     });
-    chip.append(label, del);
+    chip.append(dot, label, del);
     wrap.appendChild(chip);
   }
 }
@@ -1229,7 +1242,6 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   autoJoinToggle.checked = settings.autoJoin !== false;
   minimizeToggle.checked = settings.minimizeOnPlay === true;
   notifyToggle.checked = settings.notifyServerBack === true;
-  trayToggle.checked = settings.minimizeToTray === true;
   betaToggle.checked = settings.betaChannel === true;
   betaUnlockedHash = typeof settings.betaUnlocked === "string" ? settings.betaUnlocked.toLowerCase() : null;
   friendsList = Array.isArray(settings.friends) ? settings.friends : [];

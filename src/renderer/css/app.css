@@ -1213,3 +1213,7 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 
 /* ── Le troupeau (L3) ── */
 .sheep-piece { position: fixed; top: -42px; z-index: 130; pointer-events: none; }
+
+/* Pastille de présence des amis (alimentée par le statut serveur) */
+.friend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 6px; background: #59506e; }
+.friend-dot.online { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.7); }
