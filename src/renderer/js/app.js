@@ -807,12 +807,49 @@ const trayToggle = $("#tray-toggle");
 trayToggle.addEventListener("change", () => api.settings.set({ minimizeToTray: trayToggle.checked }));
 
 const betaToggle = $("#beta-toggle");
+const betaCodeRow = $("#beta-code-row");
+let betaUnlockedHash = null; // empreinte du code déjà validé (settings.betaUnlocked)
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+/** Empreinte attendue, publiée dans launcher.json (betaCodeHash). Vide = canal libre. */
+function betaGate() {
+  return String(ui.remoteConfig?.betaCodeHash || "").toLowerCase();
+}
 betaToggle.addEventListener("change", () => {
+  const gate = betaGate();
+  if (betaToggle.checked && gate && betaUnlockedHash !== gate) {
+    betaToggle.checked = false;
+    betaCodeRow.hidden = false;
+    $("#beta-code-input").focus();
+    return;
+  }
+  betaCodeRow.hidden = true;
   api.settings.set({ betaChannel: betaToggle.checked });
   toast(betaToggle.checked
     ? "Canal bêta activé — pris en compte à la prochaine vérification (≤ 1 min)."
     : "Retour au canal stable.");
 });
+async function unlockBeta() {
+  const input = $("#beta-code-input");
+  const value = input.value.trim();
+  if (!value) return;
+  const hash = await sha256Hex(value);
+  if (hash === betaGate()) {
+    betaUnlockedHash = hash;
+    api.settings.set({ betaUnlocked: hash, betaChannel: true });
+    betaToggle.checked = true;
+    betaCodeRow.hidden = true;
+    input.value = "";
+    toast("Code accepté — canal bêta déverrouillé. Bienvenue chez les aventuriers !");
+  } else {
+    toast("Code incorrect.");
+  }
+}
+$("#beta-code-btn").addEventListener("click", unlockBeta);
+$("#beta-code-input").addEventListener("keydown", (e) => { if (e.key === "Enter") unlockBeta(); });
 
 /* ── Amis à suivre (J4) ────────────────────────────────────── */
 let friendsList = [];
@@ -1194,6 +1231,7 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   notifyToggle.checked = settings.notifyServerBack === true;
   trayToggle.checked = settings.minimizeToTray === true;
   betaToggle.checked = settings.betaChannel === true;
+  betaUnlockedHash = typeof settings.betaUnlocked === "string" ? settings.betaUnlocked.toLowerCase() : null;
   friendsList = Array.isArray(settings.friends) ? settings.friends : [];
   renderFriends();
   ui.dismissedEventKey = settings.dismissedEventKey ?? null;
@@ -1203,6 +1241,14 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   renderAccounts(accountList);
   injectSparks();
   await loadRemoteConfig();
+  {
+    const gate = betaGate();
+    if (gate && betaToggle.checked && betaUnlockedHash !== gate) {
+      betaToggle.checked = false;
+      api.settings.set({ betaChannel: false });
+      toast("Le code du canal bêta a changé — entre le nouveau code pour le réactiver.");
+    }
+  }
   refreshStatus();
   refreshNewsBadge();
   maybeOnboard(settings, info);

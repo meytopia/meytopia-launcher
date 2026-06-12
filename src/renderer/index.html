@@ -262,8 +262,8 @@
           </div>
           <div class="setting-row">
             <div class="setting-meta">
-              <span class="setting-name">Réduire près de l'horloge</span>
-              <span class="setting-hint">Fermer la fenêtre la cache dans la zone de notification — le launcher continue de veiller (clic droit sur l'icône : Ouvrir, Jouer, Quitter)</span>
+              <span class="setting-name">Garder en arrière-plan</span>
+              <span class="setting-hint">Fermer la fenêtre ne quitte pas le launcher : il se range près de l'horloge, en bas à droite de Windows, et continue de veiller (mises à jour comprises). Clic droit sur son icône : Ouvrir, Jouer, Quitter</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="tray-toggle" />
@@ -322,6 +322,16 @@
               <input type="checkbox" id="beta-toggle" />
               <span class="switch-track" aria-hidden="true"></span>
             </label>
+          </div>
+          <div class="setting-row" id="beta-code-row" hidden>
+            <div class="setting-meta">
+              <span class="setting-name">Code d'accès bêta</span>
+              <span class="setting-hint">Le canal bêta est protégé — entre le code transmis par un admin</span>
+            </div>
+            <div class="friend-add">
+              <input type="password" id="beta-code-input" placeholder="Code secret" maxlength="64" />
+              <button class="ghost-btn" id="beta-code-btn">Déverrouiller</button>
+            </div>
           </div>
         </div>
 
