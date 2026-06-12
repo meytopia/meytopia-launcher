@@ -814,6 +814,9 @@ minimizeToggle.addEventListener("change", () => api.settings.set({ minimizeOnPla
 const notifyToggle = $("#notify-toggle");
 notifyToggle.addEventListener("change", () => api.settings.set({ notifyServerBack: notifyToggle.checked }));
 
+const trayToggle = $("#tray-toggle");
+trayToggle.addEventListener("change", () => api.settings.set({ minimizeToTray: trayToggle.checked }));
+
 const betaToggle = $("#beta-toggle");
 const betaCodeRow = $("#beta-code-row");
 let betaUnlockedHash = null; // empreinte du code déjà validé (settings.betaUnlocked)
@@ -1242,6 +1245,7 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   autoJoinToggle.checked = settings.autoJoin !== false;
   minimizeToggle.checked = settings.minimizeOnPlay === true;
   notifyToggle.checked = settings.notifyServerBack === true;
+  trayToggle.checked = settings.minimizeToTray === true;
   betaToggle.checked = settings.betaChannel === true;
   betaUnlockedHash = typeof settings.betaUnlocked === "string" ? settings.betaUnlocked.toLowerCase() : null;
   friendsList = Array.isArray(settings.friends) ? settings.friends : [];

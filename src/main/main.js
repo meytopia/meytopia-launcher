@@ -143,6 +143,14 @@ function createWindow() {
   };
   ['resize', 'move', 'maximize', 'unmaximize'].forEach((ev) => mainWindow.on(ev, persistWindowState));
 
+  // « Garder en arrière-plan » : fermer cache la fenêtre, le launcher veille (J8)
+  mainWindow.on('close', (event) => {
+    if (!quitting && settings.read().minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
