@@ -74,6 +74,7 @@ function showPage(id) {
   if (id === "news") loadNews();
   if (id === "content") loadContent();
   if (id === "patchnotes") loadChangelog();
+  if (id === "friends") renderFriends();
 }
 $$(".nav-item[data-page]").forEach((btn) => btn.addEventListener("click", () => showPage(btn.dataset.page)));
 
@@ -309,7 +310,10 @@ function renderStatus(status) {
   const key = next.sort().join(",");
   if (key !== renderStatus._friendsKey) {
     renderStatus._friendsKey = key;
+    const prev = onlineNames;
     onlineNames = new Set(next);
+    notifyFriendJoins(prev, onlineNames);
+    onlineReady = true;
     renderFriends();
   }
 }
@@ -349,12 +353,12 @@ function updateStatusLabel() {
   setTimeout(() => {
     // Pas de await ici : la replanification ne dépend jamais de la réponse,
     // la boucle ne peut donc pas mourir sur un appel suspendu.
-    if (ui.page === "home" && !document.hidden) refreshStatus();
+    if ((ui.page === "home" || ui.page === "friends") && !document.hidden) refreshStatus();
     statusLoop();
   }, statusIntervalMs());
 })();
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && ui.page === "home") refreshStatus();
+  if (!document.hidden && (ui.page === "home" || ui.page === "friends")) refreshStatus();
 });
 
 /* ── News (CDC F9) ─────────────────────────────────────────── */
@@ -864,29 +868,73 @@ $("#beta-code-input").addEventListener("keydown", (e) => { if (e.key === "Enter"
 
 /* ── Amis à suivre (J4) ────────────────────────────────────── */
 let friendsList = [];
+let friendsMuted = new Set(); // pseudos (minuscules) dont la cloche est coupée
+let friendsNotify = true; // interrupteur global des notifications
 let onlineNames = new Set(); // joueurs actuellement en ligne (alimenté par le statut serveur)
+let onlineReady = false; // premier relevé reçu (évite les fausses notifs au démarrage)
+
+function persistFriends() {
+  api.settings.set({ friends: friendsList, friendsMuted: [...friendsMuted], friendsNotify });
+}
 function renderFriends() {
   const wrap = $("#friends-list");
   wrap.textContent = "";
-  for (const name of friendsList) {
-    const chip = document.createElement("span");
-    chip.className = "friend-chip";
+  const sorted = [...friendsList].sort((a, b) => {
+    const ao = onlineNames.has(a.toLowerCase()) ? 0 : 1;
+    const bo = onlineNames.has(b.toLowerCase()) ? 0 : 1;
+    return ao - bo || a.localeCompare(b, "fr");
+  });
+  for (const name of sorted) {
+    const low = name.toLowerCase();
+    const isOn = onlineNames.has(low);
+    const muted = friendsMuted.has(low);
+    const card = document.createElement("div");
+    card.className = "friend-card" + (isOn ? " online" : "");
     const dot = document.createElement("span");
-    const isOn = onlineNames.has(name.toLowerCase());
     dot.className = "friend-dot" + (isOn ? " online" : "");
-    dot.title = isOn ? "En ligne sur le serveur" : "Hors ligne";
     const label = document.createElement("span");
+    label.className = "friend-name";
     label.textContent = name;
-    const del = document.createElement("button");
-    del.textContent = "✕";
-    del.title = "Ne plus suivre";
-    del.addEventListener("click", () => {
-      friendsList = friendsList.filter((f) => f !== name);
-      api.settings.set({ friends: friendsList });
+    const state = document.createElement("span");
+    state.className = "friend-state";
+    state.textContent = isOn ? "En ligne" : "Hors ligne";
+    const bell = document.createElement("button");
+    bell.className = "friend-bell" + (muted ? " is-muted" : "");
+    bell.textContent = muted ? "🔕" : "🔔";
+    bell.title = muted ? "Notification coupée pour cet ami" : "Me prévenir quand il se connecte";
+    bell.addEventListener("click", () => {
+      if (muted) friendsMuted.delete(low); else friendsMuted.add(low);
+      persistFriends();
       renderFriends();
     });
-    chip.append(dot, label, del);
-    wrap.appendChild(chip);
+    const del = document.createElement("button");
+    del.className = "friend-remove";
+    del.textContent = "✕";
+    del.title = "Retirer cet ami";
+    del.addEventListener("click", () => {
+      friendsList = friendsList.filter((f) => f !== name);
+      friendsMuted.delete(low);
+      persistFriends();
+      renderFriends();
+    });
+    card.append(dot, label, state, bell, del);
+    wrap.appendChild(card);
+  }
+  const onCount = friendsList.filter((f) => onlineNames.has(f.toLowerCase())).length;
+  const badge = $("#friends-badge");
+  badge.hidden = onCount === 0;
+  badge.textContent = onCount;
+  const empty = $("#friends-empty");
+  if (empty) empty.hidden = friendsList.length > 0;
+}
+function notifyFriendJoins(prevSet, nextSet) {
+  if (!onlineReady || !friendsNotify) return;
+  for (const name of friendsList) {
+    const low = name.toLowerCase();
+    if (friendsMuted.has(low)) continue;
+    if (nextSet.has(low) && !prevSet.has(low)) {
+      try { new Notification("Meytopia", { body: `${name} vient de se connecter au serveur 🐑` }); } catch {}
+    }
   }
 }
 function addFriend() {
@@ -895,13 +943,14 @@ function addFriend() {
   if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) { toast("Pseudo Minecraft invalide."); return; }
   if (!friendsList.some((f) => f.toLowerCase() === name.toLowerCase())) {
     friendsList = [...friendsList, name];
-    api.settings.set({ friends: friendsList });
+    persistFriends();
     renderFriends();
   }
   input.value = "";
 }
 $("#friend-add-btn").addEventListener("click", addFriend);
 $("#friend-input").addEventListener("keydown", (e) => { if (e.key === "Enter") addFriend(); });
+$("#friends-notify-toggle").addEventListener("change", (e) => { friendsNotify = e.target.checked; persistFriends(); });
 
 /* ── Easter egg : le troupeau (L3) ─────────────────────────── */
 const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
@@ -1249,6 +1298,9 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
   betaToggle.checked = settings.betaChannel === true;
   betaUnlockedHash = typeof settings.betaUnlocked === "string" ? settings.betaUnlocked.toLowerCase() : null;
   friendsList = Array.isArray(settings.friends) ? settings.friends : [];
+  friendsMuted = new Set((Array.isArray(settings.friendsMuted) ? settings.friendsMuted : []).map((s) => String(s).toLowerCase()));
+  friendsNotify = settings.friendsNotify !== false;
+  $("#friends-notify-toggle").checked = friendsNotify;
   renderFriends();
   ui.dismissedEventKey = settings.dismissedEventKey ?? null;
   $("#ram-hint").textContent = `Recommandé : ${recommended} Go`;

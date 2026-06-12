@@ -56,6 +56,11 @@
         <svg viewBox="0 0 24 24"><path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4M10 12h4"/></svg>
         <span>Patchnotes</span>
       </button>
+      <button class="nav-item" data-page="friends">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.7-3 2.9-4.5 5.5-4.5s4.8 1.5 5.5 4.5M15.5 11.2a3 3 0 1 0-1.5-5.5M16 14.6c2.1.3 3.8 1.7 4.4 4.4"/></svg>
+        <span>Amis</span>
+        <span id="friends-badge" class="badge" hidden>0</span>
+      </button>
       <button class="nav-item" data-page="settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
         <span>Paramètres</span>
@@ -191,6 +196,31 @@
       </section>
 
       <!-- ── Paramètres ── -->
+      <section id="page-friends" class="page">
+        <header class="page-head">
+          <h1>Amis</h1>
+          <p class="page-desc">Garde un œil sur ton équipe : pastille verte = en ligne sur le serveur, c'est le moment de les rejoindre. La cloche règle la notification de connexion, ami par ami.</p>
+        </header>
+        <div class="panel">
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Notifications de connexion</span>
+              <span class="setting-hint">Une notification Windows quand un ami arrive sur le serveur — coupe le tout ici, ou un ami en particulier avec sa cloche</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="friends-notify-toggle" />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="friend-add friends-add-page">
+            <input type="text" id="friend-input" placeholder="Pseudo Minecraft" maxlength="16" />
+            <button class="ghost-btn" id="friend-add-btn">Ajouter</button>
+          </div>
+          <div class="friends-cards" id="friends-list"></div>
+          <p class="friends-empty" id="friends-empty">Ajoute un premier pseudo pour voir s'il est en ligne.</p>
+        </div>
+      </section>
+
       <section id="page-settings" class="page">
         <header class="page-head">
           <h2>Paramètres</h2>
@@ -269,17 +299,6 @@
               <input type="checkbox" id="tray-toggle" />
               <span class="switch-track" aria-hidden="true"></span>
             </label>
-          </div>
-          <div class="setting-row friends-row">
-            <div class="setting-meta">
-              <span class="setting-name">Amis</span>
-              <span class="setting-hint">Ajoute le pseudo d'un joueur pour voir d'un coup d'œil s'il est en ligne sur le serveur — pastille verte = connecté, c'est le moment de le rejoindre</span>
-              <div class="friends-chips" id="friends-list"></div>
-            </div>
-            <div class="friend-add">
-              <input type="text" id="friend-input" placeholder="Pseudo Minecraft" maxlength="16" />
-              <button class="ghost-btn" id="friend-add-btn">Ajouter</button>
-            </div>
           </div>
         </div>
 

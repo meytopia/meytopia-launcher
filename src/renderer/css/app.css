@@ -1217,3 +1217,19 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 /* Pastille de présence des amis (alimentée par le statut serveur) */
 .friend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 6px; background: #59506e; }
 .friend-dot.online { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.7); }
+
+/* ── Page Amis ── */
+.friends-add-page { margin: 16px 0; }
+.friends-cards { display: flex; flex-direction: column; gap: 10px; }
+.friend-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); transition: border-color 0.2s ease, background 0.2s ease; }
+.friend-card.online { border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.07); }
+.friend-card .friend-dot { margin-right: 0; }
+.friend-name { font-weight: 600; }
+.friend-state { color: rgba(255, 255, 255, 0.45); font-size: 13px; flex: 1; }
+.friend-card.online .friend-state { color: #34d399; }
+.friend-bell, .friend-remove { background: none; border: none; cursor: pointer; font-size: 15px; opacity: 0.85; padding: 4px 7px; border-radius: 8px; line-height: 1; }
+.friend-bell:hover, .friend-remove:hover { background: rgba(255, 255, 255, 0.1); opacity: 1; }
+.friend-bell.is-muted { opacity: 0.35; }
+.friend-remove { color: rgba(255, 255, 255, 0.55); }
+.friends-empty { color: rgba(255, 255, 255, 0.4); margin-top: 14px; }
+#friends-badge { background: #34d399; color: #08311f; }
