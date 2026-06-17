@@ -457,26 +457,43 @@ ipcMain.handle('stats:get', async () => {
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
 let lastServerOnline = null;
 let lastPlayers = null;
-let offlineStrikes = 0; // un seul ping rate ne suffit pas a declarer le serveur hors ligne
+let confirming = false; // evite deux rafales de confirmation en parallele
+
+// Confirmation anti-faux-positif : quand un ping rate, on re-verifie 5 fois,
+// espacees de 3 s. Il faut les 5 echecs d'affilee pour declarer le serveur hors ligne ;
+// un seul succes parmi les 5 annule la fausse alerte. On ne martele qu'en cas de doute.
+async function confirmOffline(server) {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const s = await getServerStatus(server);
+      if (s.online) return { stillOnline: true, status: s }; // un succes => fausse alerte
+    } catch { /* echec compte comme hors ligne */ }
+  }
+  return { stillOnline: false }; // 5 echecs d'affilee => vraiment hors ligne
+}
+
 setInterval(async () => {
   try {
     const prefs = settings.read();
     const friends = Array.isArray(prefs.friends) ? prefs.friends : [];
-    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; offlineStrikes = 0; return; }
+    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; return; }
     const { data: config } = await remote.getLauncherConfig();
     if (!config?.server) return;
-    const status = await getServerStatus(config.server);
+    let status = await getServerStatus(config.server);
 
-    // Anti-faux-positif : il faut 2 echecs d'affilee pour considerer le serveur vraiment hors ligne.
-    // Un ping isole qui rate (reseau, DNS) ne fait plus basculer l'etat.
-    let effectiveOnline;
-    if (status.online) {
-      offlineStrikes = 0;
-      effectiveOnline = true;
-    } else {
-      offlineStrikes += 1;
-      if (offlineStrikes >= 2) effectiveOnline = false;
-      else effectiveOnline = lastServerOnline === null ? false : lastServerOnline; // on garde l'etat connu le temps de confirmer
+    // Si le serveur semble hors ligne et qu'on le croyait en ligne (ou inconnu),
+    // on confirme par une rafale avant de basculer l'etat. Evite les faux "de retour".
+    let effectiveOnline = Boolean(status.online);
+    if (!status.online && lastServerOnline !== false && !confirming) {
+      confirming = true;
+      try {
+        const res = await confirmOffline(config.server);
+        if (res.stillOnline) { effectiveOnline = true; status = res.status; } // c'etait un faux negatif
+        else effectiveOnline = false; // confirme hors ligne
+      } finally { confirming = false; }
+    } else if (!status.online && lastServerOnline === false) {
+      effectiveOnline = false; // deja connu hors ligne, pas besoin de reconfirmer
     }
 
     if (prefs.notifyServerBack && lastServerOnline === false && effectiveOnline === true && Notification.isSupported()) {
