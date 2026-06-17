@@ -457,19 +457,32 @@ ipcMain.handle('stats:get', async () => {
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
 let lastServerOnline = null;
 let lastPlayers = null;
+let offlineStrikes = 0; // un seul ping rate ne suffit pas a declarer le serveur hors ligne
 setInterval(async () => {
   try {
     const prefs = settings.read();
     const friends = Array.isArray(prefs.friends) ? prefs.friends : [];
-    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; return; }
+    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; offlineStrikes = 0; return; }
     const { data: config } = await remote.getLauncherConfig();
     if (!config?.server) return;
     const status = await getServerStatus(config.server);
 
-    if (prefs.notifyServerBack && lastServerOnline === false && status.online && Notification.isSupported()) {
-      new Notification({ title: 'Meytopia', body: 'Le serveur est de retour en ligne !' }).show();
+    // Anti-faux-positif : il faut 2 echecs d'affilee pour considerer le serveur vraiment hors ligne.
+    // Un ping isole qui rate (reseau, DNS) ne fait plus basculer l'etat.
+    let effectiveOnline;
+    if (status.online) {
+      offlineStrikes = 0;
+      effectiveOnline = true;
+    } else {
+      offlineStrikes += 1;
+      if (offlineStrikes >= 2) effectiveOnline = false;
+      else effectiveOnline = lastServerOnline === null ? false : lastServerOnline; // on garde l'etat connu le temps de confirmer
     }
-    lastServerOnline = Boolean(status.online);
+
+    if (prefs.notifyServerBack && lastServerOnline === false && effectiveOnline === true && Notification.isSupported()) {
+      new Notification({ title: 'Meytopia', body: 'Le serveur est de retour en ligne !', urgency: 'critical', timeoutType: 'never' }).show();
+    }
+    lastServerOnline = effectiveOnline;
 
     const players = status.online && Array.isArray(status.players) ? status.players : null;
     if (players && friends.length && lastPlayers && Notification.isSupported()) {
@@ -484,7 +497,7 @@ setInterval(async () => {
         const body = arrivals.length === 1
           ? `${arrivals[0]} vient de se connecter sur Meytopia !`
           : `${arrivals.join(', ')} viennent de se connecter sur Meytopia !`;
-        new Notification({ title: 'Meytopia', body }).show();
+        new Notification({ title: 'Meytopia', body, urgency: 'critical', timeoutType: 'never' }).show();
       }
     }
     if (players) lastPlayers = players;
