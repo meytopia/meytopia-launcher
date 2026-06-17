@@ -438,6 +438,22 @@ ipcMain.handle('pack:info', async () => {
   } catch { return null; }
 });
 
+// Stats du joueur : telecharge le releve de la sonde (branche stats, lecture seule)
+// et renvoie { me, data } ou me = pseudo Minecraft du compte actif.
+ipcMain.handle('stats:get', async () => {
+  try {
+    const { STATS_URL, FETCH_TIMEOUT_MS } = require('./config');
+    const active = accounts.summary().find((a) => a.active);
+    const me = active ? active.name : null;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
+    const res = await fetch(STATS_URL + '?nc=' + Date.now(), { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!res.ok) return { me, data: null };
+    return { me, data: await res.json() };
+  } catch { return { me: null, data: null }; }
+});
+
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
 let lastServerOnline = null;
 let lastPlayers = null;

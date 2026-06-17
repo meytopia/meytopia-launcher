@@ -75,6 +75,7 @@ function showPage(id) {
   if (id === "content") loadContent();
   if (id === "patchnotes") loadChangelog();
   if (id === "friends") renderFriends();
+  if (id === "mystats") loadMyStats();
 }
 $$(".nav-item[data-page]").forEach((btn) => btn.addEventListener("click", () => showPage(btn.dataset.page)));
 
@@ -1264,6 +1265,137 @@ async function showWhatsNew(version) {
 $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidden = true; });
 
 /* ── Initialisation ────────────────────────────────────────── */
+/* ── Mes stats ─────────────────────────────────────────────── */
+let myStatsLoaded = false;
+function fmtPlayTime(mins) {
+  mins = Math.round(mins || 0);
+  if (mins < 60) return mins + " min";
+  const h = Math.floor(mins / 60);
+  if (h < 24) return h + " h " + String(mins % 60).padStart(2, "0");
+  const d = Math.floor(h / 24);
+  return d + " j " + (h % 24) + " h";
+}
+function fmtShortDate(iso) {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }); }
+  catch { return "—"; }
+}
+async function loadMyStats(force) {
+  if (myStatsLoaded && !force) return;
+  $("#mystats-loading").hidden = false;
+  $("#mystats-content").hidden = true;
+  $("#mystats-empty").hidden = true;
+  let res;
+  try { res = await api.app.playerStats(); } catch { res = null; }
+  $("#mystats-loading").hidden = true;
+  myStatsLoaded = true;
+
+  const seen = res && res.data && res.data.seen ? res.data.seen : null;
+  if (!seen) {
+    const el = $("#mystats-empty");
+    el.hidden = false;
+    el.textContent = "Statistiques indisponibles pour le moment — réessaie dans un instant.";
+    return;
+  }
+  // Classement par minutes (assiduité)
+  const ranked = Object.entries(seen)
+    .map(([name, s]) => ({ name, minutes: s.minutes || 0, first: s.first, last: s.last, days: 0 }))
+    .filter((p) => p.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes);
+
+  const me = res.me;
+  const meEntry = me ? seen[me] : null;
+
+  if (!me) {
+    // Pas de compte actif : on montre quand meme le classement public
+    $("#mystats-content").hidden = false;
+    $("#mystats-name").textContent = "Connecte-toi pour voir tes stats";
+    $("#mystats-sub").textContent = "le classement public reste visible ci-dessous";
+    $("#mystats-time").textContent = "—";
+    $("#mystats-days").textContent = "—";
+    $("#mystats-rank").textContent = "—";
+    $("#mystats-first").textContent = "—";
+    $("#mystats-badges").innerHTML = "";
+    renderMyLeaderboard(ranked, null);
+    return;
+  }
+
+  $("#mystats-content").hidden = false;
+  $("#mystats-name").textContent = me;
+
+  if (!meEntry || !(meEntry.minutes > 0)) {
+    // Compte connu mais jamais vu sur le serveur
+    $("#mystats-sub").textContent = "Tu n'as pas encore été détecté en jeu — lance une partie !";
+    $("#mystats-time").textContent = "0 min";
+    $("#mystats-days").textContent = "0";
+    $("#mystats-rank").textContent = "—";
+    $("#mystats-first").textContent = "—";
+    $("#mystats-badges").innerHTML = "";
+    renderMyLeaderboard(ranked, me);
+    return;
+  }
+
+  // Nombre de jours distincts vus (parcourt les days{})
+  let dayCount = 0;
+  const days = res.data.days || {};
+  for (const day of Object.keys(days)) {
+    const pres = days[day] && days[day].presence ? days[day].presence : {};
+    if (pres[me] && pres[me].length) dayCount += 1;
+  }
+  const rankIndex = ranked.findIndex((p) => p.name === me);
+  const rank = rankIndex >= 0 ? rankIndex + 1 : null;
+
+  $("#mystats-sub").textContent = "cette saison sur Meytopia";
+  $("#mystats-time").textContent = fmtPlayTime(meEntry.minutes);
+  $("#mystats-days").textContent = String(dayCount);
+  $("#mystats-rank").textContent = rank ? "#" + rank : "—";
+  $("#mystats-first").textContent = fmtShortDate(meEntry.first);
+
+  // Jalons
+  const badges = [];
+  if (rank === 1) badges.push("👑 Joueur le plus assidu");
+  else if (rank && rank <= 3) badges.push("🥇 Top 3 des assidus");
+  else if (rank && rank <= 10) badges.push("⭐ Top 10 des assidus");
+  if (meEntry.minutes >= 6000) badges.push("🏆 100 h de jeu");
+  else if (meEntry.minutes >= 3000) badges.push("🎖 50 h de jeu");
+  else if (meEntry.minutes >= 600) badges.push("🎮 10 h de jeu");
+  if (dayCount >= 30) badges.push("📅 30 jours de présence");
+  else if (dayCount >= 7) badges.push("📅 Une semaine de présence");
+  if (ranked.length && ranked[0].name === me && ranked.length >= 5) badges.push("🔥 N°1 du serveur");
+  $("#mystats-badges").innerHTML = badges.length
+    ? badges.map((b) => `<span class="mystats-badge">${esc(b)}</span>`).join("")
+    : `<span class="mystats-badge">🌱 Bienvenue sur Meytopia</span>`;
+
+  renderMyLeaderboard(ranked, me);
+}
+function renderMyLeaderboard(ranked, me) {
+  const top = ranked.slice(0, 10);
+  const medal = ["gold", "silver", "bronze"];
+  let html = top.map((p, i) => {
+    const cls = i < 3 ? " " + medal[i] : "";
+    const isMe = me && p.name === me;
+    return `<div class="mystats-row${isMe ? " is-me" : ""}">
+      <div class="mystats-rank-badge${cls}">${i + 1}</div>
+      <div class="mystats-row-name">${esc(p.name)}${isMe ? '<span class="me-tag">toi</span>' : ""}</div>
+      <div class="mystats-row-time">${fmtPlayTime(p.minutes)}</div>
+    </div>`;
+  }).join("");
+  // Si le joueur est hors du top 10, on l'ajoute en pied
+  if (me) {
+    const myIdx = ranked.findIndex((p) => p.name === me);
+    if (myIdx >= 10) {
+      const p = ranked[myIdx];
+      html += `<div class="mystats-row is-me" style="margin-top:6px;border-top:2px dashed var(--border-strong)">
+        <div class="mystats-rank-badge">${myIdx + 1}</div>
+        <div class="mystats-row-name">${esc(p.name)}<span class="me-tag">toi</span></div>
+        <div class="mystats-row-time">${fmtPlayTime(p.minutes)}</div>
+      </div>`;
+    }
+  }
+  $("#mystats-leaderboard").innerHTML = html || '<div class="muted">Aucun joueur enregistré pour le moment.</div>';
+}
+$("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
+
 (async function init() {
   const [settings, info, accountList] = await Promise.all([
     api.settings.get(),

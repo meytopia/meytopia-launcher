@@ -1233,3 +1233,47 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .friend-remove { color: rgba(255, 255, 255, 0.55); }
 .friends-empty { color: rgba(255, 255, 255, 0.4); margin-top: 14px; }
 #friends-badge { background: #34d399; color: #08311f; }
+
+/* ════════ Page Mes stats ════════ */
+.btn-sm { padding: 5px 12px; font-size: 13px; }
+.mystats-hero {
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  border-radius: var(--radius); padding: 22px 24px; margin-bottom: 18px;
+}
+.mystats-hero-name { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.mystats-hero-sub { color: rgba(255,255,255,.78); font-size: 14px; margin-top: 2px; }
+.mystats-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.mystats-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.mystats-num { font-size: 24px; font-weight: 800; color: var(--accent-hover); }
+.mystats-lab { color: var(--text-dim); font-size: 12px; margin-top: 4px; }
+.mystats-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.mystats-badge {
+  background: var(--accent-soft); border: 1px solid var(--border-strong);
+  color: var(--accent-hover); border-radius: 999px; padding: 6px 14px;
+  font-size: 13px; font-weight: 600;
+}
+.mystats-board {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px;
+}
+.mystats-board-title { font-weight: 700; margin-bottom: 12px; }
+.mystats-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 10px;
+  border-radius: var(--radius-sm);
+}
+.mystats-row + .mystats-row { border-top: 1px solid var(--border); }
+.mystats-row.is-me { background: var(--accent-soft); }
+.mystats-rank-badge {
+  width: 26px; height: 26px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--surface-high); color: var(--text-dim);
+}
+.mystats-rank-badge.gold { background: #fbbf24; color: #4a3500; }
+.mystats-rank-badge.silver { background: #cbd5e1; color: #2d3748; }
+.mystats-rank-badge.bronze { background: #d97706; color: #1a0f00; }
+.mystats-row-name { flex: 1; font-weight: 600; }
+.mystats-row-name .me-tag { color: var(--accent-hover); font-size: 12px; margin-left: 6px; }
+.mystats-row-time { color: var(--text-dim); font-size: 14px; }

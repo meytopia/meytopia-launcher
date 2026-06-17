@@ -61,6 +61,10 @@
         <span>Amis</span>
         <span id="friends-badge" class="badge" hidden>0</span>
       </button>
+      <button class="nav-item" data-page="mystats">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>Mes stats</span>
+      </button>
       <button class="nav-item" data-page="settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
         <span>Paramètres</span>
@@ -219,6 +223,33 @@
           <div class="friends-cards" id="friends-list"></div>
           <p class="friends-empty" id="friends-empty">Ajoute un premier pseudo pour voir s'il est en ligne.</p>
         </div>
+      </section>
+
+      <!-- ── Mes stats ── -->
+      <section id="page-mystats" class="page">
+        <header class="page-head">
+          <h2>Mes stats</h2>
+          <button id="mystats-refresh" class="btn ghost btn-sm">↻ Actualiser</button>
+        </header>
+        <div id="mystats-loading" class="muted">Chargement de tes statistiques…</div>
+        <div id="mystats-content" hidden>
+          <div class="mystats-hero">
+            <div class="mystats-hero-name" id="mystats-name">—</div>
+            <div class="mystats-hero-sub" id="mystats-sub">cette saison sur Meytopia</div>
+          </div>
+          <div class="mystats-cards">
+            <div class="mystats-card"><div class="mystats-num" id="mystats-time">—</div><div class="mystats-lab">temps de jeu</div></div>
+            <div class="mystats-card"><div class="mystats-num" id="mystats-days">—</div><div class="mystats-lab">jours de connexion</div></div>
+            <div class="mystats-card"><div class="mystats-num" id="mystats-rank">—</div><div class="mystats-lab">classement assiduité</div></div>
+            <div class="mystats-card"><div class="mystats-num" id="mystats-first">—</div><div class="mystats-lab">première connexion</div></div>
+          </div>
+          <div id="mystats-badges" class="mystats-badges"></div>
+          <div class="mystats-board">
+            <div class="mystats-board-title">🏆 Top joueurs les plus assidus</div>
+            <div id="mystats-leaderboard"></div>
+          </div>
+        </div>
+        <div id="mystats-empty" class="muted" hidden></div>
       </section>
 
       <section id="page-settings" class="page">
