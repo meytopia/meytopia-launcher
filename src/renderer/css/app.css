@@ -1277,3 +1277,46 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .mystats-row-name { flex: 1; font-weight: 600; }
 .mystats-row-name .me-tag { color: var(--accent-hover); font-size: 12px; margin-left: 6px; }
 .mystats-row-time { color: var(--text-dim); font-size: 14px; }
+
+/* ════════ Pouls vivant (accueil) ════════ */
+.pulse-banner {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 7px 16px; margin: 4px 0 18px;
+  font-size: 14px; font-weight: 600; animation: pulseIn .4s ease;
+}
+.pulse-emoji { font-size: 17px; }
+@keyframes pulseIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ════════ Page Communauté ════════ */
+.comm-pulse {
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  border-radius: var(--radius); padding: 18px 22px; margin-bottom: 18px;
+}
+.comm-pulse-emoji { font-size: 34px; }
+.comm-pulse-text { font-size: 19px; font-weight: 800; }
+.comm-pulse-sub { color: rgba(255,255,255,.8); font-size: 13px; margin-top: 2px; }
+.comm-hero-card {
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 20px 22px; margin-bottom: 22px;
+  position: relative; overflow: hidden;
+}
+.comm-hero-card::after {
+  content: "🌟"; position: absolute; right: -10px; top: -10px;
+  font-size: 90px; opacity: .06; transform: rotate(15deg);
+}
+.comm-hero-label { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.comm-hero-name { font-size: 26px; font-weight: 800; color: var(--accent-hover); margin: 4px 0 2px; }
+.comm-hero-title { font-size: 15px; font-weight: 600; }
+.comm-hero-detail { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+.comm-moments-title { font-weight: 700; margin-bottom: 12px; font-size: 16px; }
+.comm-moment {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;
+}
+.comm-moment-emoji { font-size: 22px; flex: none; line-height: 1.3; }
+.comm-moment-body { flex: 1; }
+.comm-moment-text { font-weight: 600; font-size: 14px; }
+.comm-moment-when { color: var(--text-dim); font-size: 12px; margin-top: 2px; }

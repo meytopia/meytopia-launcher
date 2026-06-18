@@ -76,6 +76,7 @@ function showPage(id) {
   if (id === "patchnotes") loadChangelog();
   if (id === "friends") renderFriends();
   if (id === "mystats") loadMyStats();
+  if (id === "community") loadCommunity();
 }
 $$(".nav-item[data-page]").forEach((btn) => btn.addEventListener("click", () => showPage(btn.dataset.page)));
 
@@ -273,6 +274,7 @@ function renderStatus(status) {
   const dot = $("#st-dot");
   dot.classList.toggle("online", Boolean(status.online));
   dot.classList.toggle("offline", !status.online);
+  updateHomePulse(status);
   $("#st-state").textContent = status.online ? "En ligne" : "Hors ligne";
   const playersEl = $("#st-players");
   const playersText = status.online ? `${status.playersOnline}\u2009/\u2009${status.playersMax}` : "—\u2009/\u2009—";
@@ -1392,6 +1394,260 @@ function renderMyLeaderboard(ranked, me) {
   $("#mystats-leaderboard").innerHTML = html || '<div class="muted">Aucun joueur enregistré pour le moment.</div>';
 }
 $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
+
+/* ── Communauté : pouls, héros du jour (20 catégories), moments ── */
+let communityLoaded = false;
+
+// Outils de calcul sur le fichier stats (days + seen)
+function statMinuteOfDay(slotIndex) { return slotIndex; } // 1 slot = 1 minute (format v3)
+function statDayKeys(data) { return Object.keys(data.days || {}).sort(); }
+function statTodayKey() { return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(new Date()); }
+
+// Calcule, pour chaque joueur, des indicateurs derivables des donnees de presence
+function computePlayerMetrics(data) {
+  const seen = data.seen || {};
+  const days = data.days || {};
+  const metrics = {};
+  for (const name of Object.keys(seen)) {
+    metrics[name] = {
+      name,
+      minutes: seen[name].minutes || 0,
+      first: seen[name].first,
+      last: seen[name].last,
+      days: 0,            // nb de jours distincts vus
+      latestSlot: -1,     // créneau le plus tardif (couche-tard)
+      earliestSlot: 1441, // créneau le plus matinal (lève-tôt)
+      nightMin: 0,        // minutes entre 0h et 6h (noctambule)
+      longestSession: 0,  // plus longue session continue (marathonien)
+      soloMin: 0,         // minutes où il était seul (solitaire)
+      crowdMin: 0,        // minutes où >=4 joueurs (sociable)
+    };
+  }
+  for (const day of Object.keys(days)) {
+    const d = days[day];
+    const presence = d.presence || {};
+    const slots = Array.isArray(d.slots) ? d.slots : [];
+    for (const name of Object.keys(presence)) {
+      if (!metrics[name]) continue;
+      const arr = (presence[name] || []).slice().sort((a, b) => a - b);
+      if (!arr.length) continue;
+      metrics[name].days += 1;
+      metrics[name].latestSlot = Math.max(metrics[name].latestSlot, arr[arr.length - 1]);
+      metrics[name].earliestSlot = Math.min(metrics[name].earliestSlot, arr[0]);
+      // nuit (0h-6h = slots 0..359)
+      metrics[name].nightMin += arr.filter((s) => s < 360).length;
+      // plus longue session continue (trous <= 2 min tolérés)
+      let run = 1, best = 1;
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i] - arr[i - 1] <= 2) { run += arr[i] - arr[i - 1]; best = Math.max(best, run); }
+        else run = 1;
+      }
+      metrics[name].longestSession = Math.max(metrics[name].longestSession, best);
+      // solo / foule (selon le compteur global de ce créneau)
+      for (const s of arr) {
+        const c = slots[s];
+        if (typeof c === "number" && c >= 0) {
+          if (c <= 1) metrics[name].soloMin += 1;
+          if (c >= 4) metrics[name].crowdMin += 1;
+        }
+      }
+    }
+  }
+  return metrics;
+}
+
+const fmtSlotHM = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+// Les 20 catégories du héros du jour. Chacune choisit un gagnant parmi les metrics.
+// pick(m) renvoie { name, value } du meilleur, ou null si personne ne qualifie.
+function heroCategories() {
+  const top = (arr, key, min = 1) => {
+    const sorted = arr.filter((p) => (p[key] || 0) >= min).sort((a, b) => b[key] - a[key]);
+    return sorted.length ? sorted[0] : null;
+  };
+  return [
+    { emoji: "👑", title: "Le plus assidu de la saison", detail: (w) => `${fmtPlayTime(w.minutes)} de jeu au total`, pick: (a) => top(a, "minutes") },
+    { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const s = a.filter((p) => p.latestSlot >= 0).sort((x, y) => y.latestSlot - x.latestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🌅", title: "Le lève-tôt", detail: (w) => `déjà là dès ${fmtSlotHM(w.earliestSlot)}`, pick: (a) => { const s = a.filter((p) => p.earliestSlot <= 1440).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🏃", title: "Le marathonien", detail: (w) => `plus longue session : ${fmtPlayTime(w.longestSession)}`, pick: (a) => top(a, "longestSession", 2) },
+    { emoji: "📅", title: "Le fidèle", detail: (w) => `présent ${w.days} jour(s)`, pick: (a) => top(a, "days") },
+    { emoji: "🌙", title: "Le noctambule", detail: (w) => `${fmtPlayTime(w.nightMin)} entre minuit et 6h`, pick: (a) => top(a, "nightMin", 2) },
+    { emoji: "🧭", title: "L'explorateur solitaire", detail: (w) => `${fmtPlayTime(w.soloMin)} en solo sur le serveur`, pick: (a) => top(a, "soloMin", 5) },
+    { emoji: "🎉", title: "L'âme de la fête", detail: (w) => `${fmtPlayTime(w.crowdMin)} quand ça grouille`, pick: (a) => top(a, "crowdMin", 2) },
+    { emoji: "🆕", title: "La nouvelle recrue", detail: (w) => `arrivé(e) le ${fmtShortDate(w.first)}`, pick: (a) => { const s = a.filter((p) => p.first).sort((x, y) => new Date(y.first) - new Date(x.first)); return s.length ? s[0] : null; } },
+    { emoji: "🎖", title: "Le vétéran", detail: (w) => `parmi les premiers, depuis le ${fmtShortDate(w.first)}`, pick: (a) => { const s = a.filter((p) => p.first).sort((x, y) => new Date(x.first) - new Date(y.first)); return s.length ? s[0] : null; } },
+    { emoji: "⚡", title: "L'éclair récent", detail: (w) => `vu pour la dernière fois le ${fmtShortDate(w.last)}`, pick: (a) => { const s = a.filter((p) => p.last).sort((x, y) => new Date(y.last) - new Date(x.last)); return s.length ? s[0] : null; } },
+    { emoji: "💎", title: "Le pilier", detail: (w) => `${fmtPlayTime(w.minutes)} et ${w.days} jours au compteur`, pick: (a) => top(a.filter((p) => p.days >= 3), "minutes") },
+    { emoji: "🔆", title: "Le matinal endurant", detail: (w) => `lève-tôt ET assidu`, pick: (a) => { const s = a.filter((p) => p.earliestSlot < 600 && p.minutes > 0).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🌗", title: "Le veilleur de minuit", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const s = a.filter((p) => p.latestSlot >= 1380).sort((x, y) => y.latestSlot - x.latestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🔥", title: "Le marathonien d'une traite", detail: (w) => `${fmtPlayTime(w.longestSession)} sans pause`, pick: (a) => top(a, "longestSession", 5) },
+    { emoji: "🌟", title: "L'incontournable", detail: (w) => `${w.days} jours de présence`, pick: (a) => top(a.filter((p) => p.minutes >= 60), "days") },
+    { emoji: "🕯", title: "Le gardien des nuits", detail: (w) => `${fmtPlayTime(w.nightMin)} après minuit`, pick: (a) => top(a, "nightMin", 5) },
+    { emoji: "🤝", title: "Le rassembleur", detail: (w) => `souvent là quand il y a du monde`, pick: (a) => top(a, "crowdMin", 5) },
+    { emoji: "⏳", title: "Le marathonien du temps", detail: (w) => `${fmtPlayTime(w.minutes)} cumulées`, pick: (a) => top(a.filter((p) => p.days >= 2), "minutes") },
+    { emoji: "🛡", title: "Le veilleur solitaire", detail: (w) => `${fmtPlayTime(w.soloMin)} à garder le fort seul`, pick: (a) => top(a, "soloMin", 2) },
+  ];
+}
+
+// Choix de la catégorie du jour : déterministe (change chaque jour), saute les catégories sans gagnant
+function pickHeroOfDay(metrics) {
+  const arr = Object.values(metrics);
+  if (!arr.length) return null;
+  const cats = heroCategories();
+  // index de base = jour de l'année, pour une rotation stable sur la journée
+  const now = new Date();
+  const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+  for (let off = 0; off < cats.length; off++) {
+    const cat = cats[(dayOfYear + off) % cats.length];
+    const winner = cat.pick(arr);
+    if (winner) return { cat, winner };
+  }
+  return null;
+}
+
+// Détection des "moments" du serveur depuis les données
+function detectMoments(data) {
+  const moments = [];
+  const days = data.days || {};
+  const seen = data.seen || {};
+  const dayKeys = statDayKeys(data);
+  const today = statTodayKey();
+  const dayLabelFr = (k) => { try { return new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); } catch { return k; } };
+
+  // 1) Record absolu de joueurs simultanés
+  let recordPeak = 0, recordDay = null;
+  for (const k of dayKeys) {
+    const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
+    const pk = slots.length ? Math.max(...slots) : 0;
+    if (pk > recordPeak) { recordPeak = pk; recordDay = k; }
+  }
+  if (recordPeak >= 2) {
+    moments.push({ emoji: "🔥", text: `Record de la saison : ${recordPeak} joueurs en ligne en même temps`, when: recordDay === today ? "aujourd'hui !" : dayLabelFr(recordDay) });
+  }
+
+  // 2) Pic du jour même
+  if (days[today]) {
+    const slots = (days[today].slots || []).filter((v) => typeof v === "number" && v >= 0);
+    const pk = slots.length ? Math.max(...slots) : 0;
+    if (pk >= 2 && today !== recordDay) moments.push({ emoji: "📈", text: `Aujourd'hui, jusqu'à ${pk} joueurs réunis`, when: "aujourd'hui" });
+  }
+
+  // 3) Nouveaux joueurs des 7 derniers jours
+  const weekAgo = Date.now() - 7 * 86400000;
+  const newcomers = Object.entries(seen).filter(([, s]) => s.first && new Date(s.first).getTime() >= weekAgo).map(([n]) => n);
+  if (newcomers.length === 1) moments.push({ emoji: "👋", text: `Bienvenue à ${newcomers[0]}, nouveau cette semaine !`, when: "cette semaine" });
+  else if (newcomers.length > 1) moments.push({ emoji: "👋", text: `${newcomers.length} nouveaux joueurs ont rejoint le serveur`, when: "cette semaine" });
+
+  // 4) Couche-tard récent (quelqu'un vu après 1h du matin)
+  let latestName = null, latestSlot = -1;
+  if (days[today]) {
+    const presence = days[today].presence || {};
+    for (const name of Object.keys(presence)) {
+      const arr = presence[name] || [];
+      const mx = arr.length ? Math.max(...arr) : -1;
+      if (mx > latestSlot) { latestSlot = mx; latestName = name; }
+    }
+    if (latestSlot >= 60 && latestSlot < 360) moments.push({ emoji: "🌙", text: `${latestName} a veillé jusqu'à ${fmtSlotHM(latestSlot)} cette nuit`, when: "la nuit dernière" });
+  }
+
+  // 5) Joueur le plus assidu (figure de proue)
+  const topPlayer = Object.entries(seen).map(([n, s]) => ({ n, m: s.minutes || 0 })).sort((a, b) => b.m - a.m)[0];
+  if (topPlayer && topPlayer.m >= 120) moments.push({ emoji: "🏆", text: `${topPlayer.n} mène la saison avec ${fmtPlayTime(topPlayer.m)} de jeu`, when: "depuis le début" });
+
+  // 6) Jour le plus animé
+  let bestDay = null, bestPeak = 0;
+  for (const k of dayKeys) {
+    const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
+    const pk = slots.length ? Math.max(...slots) : 0;
+    if (pk > bestPeak) { bestPeak = pk; bestDay = k; }
+  }
+  if (bestDay && bestPeak >= 2 && bestDay !== recordDay && bestDay !== today) {
+    moments.push({ emoji: "🎊", text: `${dayLabelFr(bestDay)} restera un beau jour : ${bestPeak} joueurs`, when: dayLabelFr(bestDay) });
+  }
+
+  return moments;
+}
+
+// Texte de pouls selon le nombre de joueurs et l'heure
+function pulseMessage(online, count) {
+  const h = new Date().getHours();
+  if (online === false || online === null) {
+    return { emoji: "😴", text: "Serveur au repos", sub: "Reviens un peu plus tard" };
+  }
+  if (count >= 6) return { emoji: "🔥", text: `Ça grouille ! ${count} joueurs en ligne`, sub: "C'est le moment de jouer" };
+  if (count >= 3) return { emoji: "✨", text: `${count} joueurs connectés`, sub: "L'aventure continue" };
+  if (count >= 1) {
+    if (h < 7) return { emoji: "🌙", text: `${count} couche-tard en ligne`, sub: "Le serveur ne dort jamais vraiment" };
+    if (h < 12) return { emoji: "🌅", text: `${count} lève-tôt sur le serveur`, sub: "Bien matinal !" };
+    return { emoji: "🎮", text: `${count} joueur${count > 1 ? "s" : ""} en ligne`, sub: "Rejoins la partie" };
+  }
+  if (h < 7) return { emoji: "🌌", text: "Nuit calme sur Meytopia", sub: "Sois le premier à te connecter" };
+  return { emoji: "🌤", text: "Personne en ligne pour l'instant", sub: "Sois le premier à te connecter !" };
+}
+
+// Met à jour le pouls dans le hero de l'accueil (appelé par renderStatus)
+function updateHomePulse(status) {
+  const banner = $("#pulse-banner");
+  if (!banner) return;
+  const p = pulseMessage(status && status.online, status && status.online ? (status.playersOnline || 0) : 0);
+  $("#pulse-emoji").textContent = p.emoji;
+  $("#pulse-text").textContent = p.text;
+  banner.hidden = false;
+}
+
+async function loadCommunity(force) {
+  if (communityLoaded && !force) return;
+  $("#community-loading").hidden = false;
+  $("#community-content").hidden = true;
+  $("#community-empty").hidden = true;
+  let res;
+  try { res = await api.app.playerStats(); } catch { res = null; }
+  $("#community-loading").hidden = true;
+  communityLoaded = true;
+
+  const data = res && res.data ? res.data : null;
+  if (!data || !data.seen || !Object.keys(data.seen).length) {
+    const el = $("#community-empty");
+    el.hidden = false;
+    el.textContent = "La vie du serveur s'affichera ici dès que des joueurs auront été détectés en jeu.";
+    return;
+  }
+  $("#community-content").hidden = false;
+
+  // Pouls (à partir du dernier relevé du jour)
+  let lastCount = null, lastOnline = null;
+  const today = statTodayKey();
+  if (data.days && data.days[today]) {
+    const slots = data.days[today].slots || [];
+    for (let i = slots.length - 1; i >= 0; i--) {
+      if (typeof slots[i] === "number") { lastOnline = slots[i] >= 0; lastCount = slots[i] >= 0 ? slots[i] : 0; break; }
+    }
+  }
+  const p = pulseMessage(lastOnline, lastCount || 0);
+  $("#comm-pulse-emoji").textContent = p.emoji;
+  $("#comm-pulse-text").textContent = p.text;
+  $("#comm-pulse-sub").textContent = p.sub;
+
+  // Héros du jour
+  const metrics = computePlayerMetrics(data);
+  const hero = pickHeroOfDay(metrics);
+  const card = $("#comm-hero-card");
+  if (hero) {
+    card.hidden = false;
+    $("#comm-hero-name").textContent = hero.winner.name;
+    $("#comm-hero-title").textContent = hero.cat.emoji + " " + hero.cat.title;
+    $("#comm-hero-detail").textContent = hero.cat.detail(hero.winner);
+  } else {
+    card.hidden = true;
+  }
+
+  // Moments
+  const moments = detectMoments(data);
+  $("#comm-moments").innerHTML = moments.length
+    ? moments.map((m) => `<div class="comm-moment"><span class="comm-moment-emoji">${m.emoji}</span><div class="comm-moment-body"><div class="comm-moment-text">${escapeHtml(m.text)}</div><div class="comm-moment-when">${escapeHtml(m.when)}</div></div></div>`).join("")
+    : '<div class="muted">Les premiers moments mémorables arrivent bientôt…</div>';
+}
+$("#community-refresh").addEventListener("click", () => loadCommunity(true));
 
 (async function init() {
   const [settings, info, accountList] = await Promise.all([

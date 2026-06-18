@@ -61,6 +61,10 @@
         <span>Amis</span>
         <span id="friends-badge" class="badge" hidden>0</span>
       </button>
+      <button class="nav-item" data-page="community">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Communauté</span>
+      </button>
       <button class="nav-item" data-page="mystats">
         <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         <span>Mes stats</span>
@@ -111,6 +115,7 @@
           <img class="hero-logo" src="assets/logo.png" alt="Meytopia" />
           <p class="hero-greeting" id="hero-greeting"></p>
           <p class="hero-sub" id="hero-sub">Modpack officiel</p>
+          <div class="pulse-banner" id="pulse-banner" hidden><span class="pulse-emoji" id="pulse-emoji">🌙</span><span class="pulse-text" id="pulse-text"></span></div>
 
           <button id="btn-play" class="play-btn">
             <span class="play-label" id="play-label">Jouer</span>
@@ -223,6 +228,36 @@
           <div class="friends-cards" id="friends-list"></div>
           <p class="friends-empty" id="friends-empty">Ajoute un premier pseudo pour voir s'il est en ligne.</p>
         </div>
+      </section>
+
+      <!-- ── Communauté ── -->
+      <section id="page-community" class="page">
+        <header class="page-head">
+          <h2>Communauté</h2>
+          <button id="community-refresh" class="btn ghost btn-sm">↻ Actualiser</button>
+        </header>
+        <div id="community-loading" class="muted">Chargement de la vie du serveur…</div>
+        <div id="community-content" hidden>
+          <!-- Pouls -->
+          <div class="comm-pulse" id="comm-pulse">
+            <span class="comm-pulse-emoji" id="comm-pulse-emoji">🌙</span>
+            <div>
+              <div class="comm-pulse-text" id="comm-pulse-text">—</div>
+              <div class="comm-pulse-sub" id="comm-pulse-sub"></div>
+            </div>
+          </div>
+          <!-- Héros du jour -->
+          <div class="comm-hero-card" id="comm-hero-card">
+            <div class="comm-hero-label">🌟 À l'honneur aujourd'hui</div>
+            <div class="comm-hero-name" id="comm-hero-name">—</div>
+            <div class="comm-hero-title" id="comm-hero-title"></div>
+            <div class="comm-hero-detail" id="comm-hero-detail"></div>
+          </div>
+          <!-- Moments -->
+          <div class="comm-moments-title">Les moments du serveur</div>
+          <div id="comm-moments"></div>
+        </div>
+        <div id="community-empty" class="muted" hidden></div>
       </section>
 
       <!-- ── Mes stats ── -->
