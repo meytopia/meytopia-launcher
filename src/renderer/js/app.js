@@ -1444,8 +1444,9 @@ function computePlayerMetrics(data) {
       }
       metrics[name].longestSession = Math.max(metrics[name].longestSession, best);
       // solo / foule (selon le compteur global de ce créneau)
+      const slotsUsable = slots.length === 1440;
       for (const s of arr) {
-        const c = slots[s];
+        const c = slotsUsable ? slots[s] : undefined;
         if (typeof c === "number" && c >= 0) {
           if (c <= 1) metrics[name].soloMin += 1;
           if (c >= 4) metrics[name].crowdMin += 1;
@@ -1467,7 +1468,7 @@ function heroCategories() {
   };
   return [
     { emoji: "👑", title: "Le plus assidu de la saison", detail: (w) => `${fmtPlayTime(w.minutes)} de jeu au total`, pick: (a) => top(a, "minutes") },
-    { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const s = a.filter((p) => p.latestSlot >= 0).sort((x, y) => y.latestSlot - x.latestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const lateScore = (p) => p.latestSlot < 0 ? -1 : (p.latestSlot < 360 ? p.latestSlot + 1440 : p.latestSlot); const s = a.filter((p) => p.latestSlot >= 0).sort((x, y) => lateScore(y) - lateScore(x)); return s.length ? s[0] : null; } },
     { emoji: "🌅", title: "Le lève-tôt", detail: (w) => `déjà là dès ${fmtSlotHM(w.earliestSlot)}`, pick: (a) => { const s = a.filter((p) => p.earliestSlot <= 1440).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } },
     { emoji: "🏃", title: "Le marathonien", detail: (w) => `plus longue session : ${fmtPlayTime(w.longestSession)}`, pick: (a) => top(a, "longestSession", 2) },
     { emoji: "📅", title: "Le fidèle", detail: (w) => `présent ${w.days} jour(s)`, pick: (a) => top(a, "days") },
@@ -1479,7 +1480,7 @@ function heroCategories() {
     { emoji: "⚡", title: "L'éclair récent", detail: (w) => `vu pour la dernière fois le ${fmtShortDate(w.last)}`, pick: (a) => { const s = a.filter((p) => p.last).sort((x, y) => new Date(y.last) - new Date(x.last)); return s.length ? s[0] : null; } },
     { emoji: "💎", title: "Le pilier", detail: (w) => `${fmtPlayTime(w.minutes)} et ${w.days} jours au compteur`, pick: (a) => top(a.filter((p) => p.days >= 3), "minutes") },
     { emoji: "🔆", title: "Le matinal endurant", detail: (w) => `lève-tôt ET assidu`, pick: (a) => { const s = a.filter((p) => p.earliestSlot < 600 && p.minutes > 0).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } },
-    { emoji: "🌗", title: "Le veilleur de minuit", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const s = a.filter((p) => p.latestSlot >= 1380).sort((x, y) => y.latestSlot - x.latestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🌗", title: "Le veilleur de minuit", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const s = a.filter((p) => p.latestSlot >= 1380 || (p.latestSlot >= 0 && p.latestSlot < 120)).sort((x, y) => { const sc = (v) => v < 120 ? v + 1440 : v; return sc(y.latestSlot) - sc(x.latestSlot); }); return s.length ? s[0] : null; } },
     { emoji: "🔥", title: "Le marathonien d'une traite", detail: (w) => `${fmtPlayTime(w.longestSession)} sans pause`, pick: (a) => top(a, "longestSession", 5) },
     { emoji: "🌟", title: "L'incontournable", detail: (w) => `${w.days} jours de présence`, pick: (a) => top(a.filter((p) => p.minutes >= 60), "days") },
     { emoji: "🕯", title: "Le gardien des nuits", detail: (w) => `${fmtPlayTime(w.nightMin)} après minuit`, pick: (a) => top(a, "nightMin", 5) },
