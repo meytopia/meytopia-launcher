@@ -24,6 +24,12 @@ process.on('unhandledRejection', (reason) => {
   console.warn('[promesse non geree]', reason?.message ?? reason);
 });
 
+// Filet pour les erreurs synchrones imprevues : on les journalise au lieu de laisser
+// l'application se fermer brutalement. Le launcher reste ouvert et utilisable.
+process.on('uncaughtException', (err) => {
+  console.error('[erreur non geree]', err?.stack ?? err?.message ?? err);
+});
+
 // Identité Windows : nécessaire aux notifications et à la barre des tâches (I2, I14)
 app.setAppUserModelId('fr.meytopia.launcher');
 
