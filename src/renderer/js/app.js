@@ -929,14 +929,11 @@ function renderFriends() {
   if (empty) empty.hidden = friendsList.length > 0;
 }
 function notifyFriendJoins(prevSet, nextSet) {
-  if (!onlineReady || !friendsNotify) return;
-  for (const name of friendsList) {
-    const low = name.toLowerCase();
-    if (friendsMuted.has(low)) continue;
-    if (nextSet.has(low) && !prevSet.has(low)) {
-      try { new Notification("Meytopia", { body: `${name} vient de se connecter au serveur 🐑` }); } catch {}
-    }
-  }
+  // Les notifications « ami connecté » sont gerees uniquement par le processus principal
+  // (main.js), qui dispose de l'anti-faux-positif (rafale de confirmation). Ici, on ne
+  // declenche plus de notification : ce doublon, sans protection, causait de fausses alertes
+  // a chaque ping reseau manque. Cette fonction est conservee pour ne rien casser ailleurs.
+  return;
 }
 function addFriend() {
   const input = $("#friend-input");
