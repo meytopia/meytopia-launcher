@@ -1360,7 +1360,7 @@ async function loadMyStats(force) {
   else if (dayCount >= 7) badges.push("📅 Une semaine de présence");
   if (ranked.length && ranked[0].name === me && ranked.length >= 5) badges.push("🔥 N°1 du serveur");
   $("#mystats-badges").innerHTML = badges.length
-    ? badges.map((b) => `<span class="mystats-badge">${esc(b)}</span>`).join("")
+    ? badges.map((b) => `<span class="mystats-badge">${escapeHtml(b)}</span>`).join("")
     : `<span class="mystats-badge">🌱 Bienvenue sur Meytopia</span>`;
 
   renderMyLeaderboard(ranked, me);
@@ -1373,7 +1373,7 @@ function renderMyLeaderboard(ranked, me) {
     const isMe = me && p.name === me;
     return `<div class="mystats-row${isMe ? " is-me" : ""}">
       <div class="mystats-rank-badge${cls}">${i + 1}</div>
-      <div class="mystats-row-name">${esc(p.name)}${isMe ? '<span class="me-tag">toi</span>' : ""}</div>
+      <div class="mystats-row-name">${escapeHtml(p.name)}${isMe ? '<span class="me-tag">toi</span>' : ""}</div>
       <div class="mystats-row-time">${fmtPlayTime(p.minutes)}</div>
     </div>`;
   }).join("");
@@ -1384,7 +1384,7 @@ function renderMyLeaderboard(ranked, me) {
       const p = ranked[myIdx];
       html += `<div class="mystats-row is-me" style="margin-top:6px;border-top:2px dashed var(--border-strong)">
         <div class="mystats-rank-badge">${myIdx + 1}</div>
-        <div class="mystats-row-name">${esc(p.name)}<span class="me-tag">toi</span></div>
+        <div class="mystats-row-name">${escapeHtml(p.name)}<span class="me-tag">toi</span></div>
         <div class="mystats-row-time">${fmtPlayTime(p.minutes)}</div>
       </div>`;
     }
