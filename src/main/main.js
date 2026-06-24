@@ -461,54 +461,60 @@ ipcMain.handle('stats:get', async () => {
 });
 
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
-let lastServerOnline = null;
+//
+// Logique anti-faux-positif repensee. Une notif « de retour » n'est envoyee QUE si on a
+// observe une vraie sequence : serveur confirme EN LIGNE, puis confirme HORS LIGNE plusieurs
+// cycles d'affilee, puis de nouveau EN LIGNE. On ignore :
+//   - les 2 premieres minutes apres le lancement (le temps de stabiliser l'etat connu) ;
+//   - le creneau de redemarrage nocturne de l'hebergeur (~5h00-5h40) ;
+//   - tout etat non confirme (il faut 3 pings hors-ligne d'affilee pour declarer une panne).
+const SERVER_WATCH_START = Date.now();
+const OFFLINE_STRIKES_NEEDED = 3;      // 3 cycles (~90 s) hors-ligne d'affilee = panne reelle
+let serverState = "unknown";           // "unknown" | "online" | "offline"
+let offlineStreak = 0;                 // cycles hors-ligne consecutifs
 let lastPlayers = null;
-let confirming = false; // evite deux rafales de confirmation en parallele
 
-// Confirmation anti-faux-positif : quand un ping rate, on re-verifie 5 fois,
-// espacees de 3 s. Il faut les 5 echecs d'affilee pour declarer le serveur hors ligne ;
-// un seul succes parmi les 5 annule la fausse alerte. On ne martele qu'en cas de doute.
-async function confirmOffline(server) {
-  for (let i = 0; i < 5; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    try {
-      const s = await getServerStatus(server);
-      if (s.online) return { stillOnline: true, status: s }; // un succes => fausse alerte
-    } catch { /* echec compte comme hors ligne */ }
-  }
-  return { stillOnline: false }; // 5 echecs d'affilee => vraiment hors ligne
+function isNightlyRestartWindow() {
+  // Redemarrage automatique de l'hebergeur observe vers 05h24 ; on neutralise 05h00-05h40.
+  const now = new Date();
+  const m = now.getHours() * 60 + now.getMinutes();
+  return m >= 300 && m <= 340;
 }
 
 setInterval(async () => {
   try {
     const prefs = settings.read();
     const friends = Array.isArray(prefs.friends) ? prefs.friends : [];
-    if (!prefs.notifyServerBack && !friends.length) { lastServerOnline = null; lastPlayers = null; return; }
+    if (!prefs.notifyServerBack && !friends.length) { serverState = "unknown"; offlineStreak = 0; lastPlayers = null; return; }
     const { data: config } = await remote.getLauncherConfig();
     if (!config?.server) return;
-    let status = await getServerStatus(config.server);
+    const status = await getServerStatus(config.server);
+    const online = Boolean(status.online);
 
-    // Si le serveur semble hors ligne et qu'on le croyait en ligne (ou inconnu),
-    // on confirme par une rafale avant de basculer l'etat. Evite les faux "de retour".
-    let effectiveOnline = Boolean(status.online);
-    if (!status.online && lastServerOnline !== false && !confirming) {
-      confirming = true;
-      try {
-        const res = await confirmOffline(config.server);
-        if (res.stillOnline) { effectiveOnline = true; status = res.status; } // c'etait un faux negatif
-        else effectiveOnline = false; // confirme hors ligne
-      } finally { confirming = false; }
-    } else if (!status.online && lastServerOnline === false) {
-      effectiveOnline = false; // deja connu hors ligne, pas besoin de reconfirmer
+    // ── Mise a jour de l'etat confirme + detection d'une vraie transition de retour ──
+    let justCameBack = false;
+    if (online) {
+      // Le serveur repond. S'il etait CONFIRME hors ligne, c'est un vrai retour.
+      if (serverState === "offline") justCameBack = true;
+      serverState = "online";
+      offlineStreak = 0;
+    } else {
+      // Le serveur ne repond pas : on accumule, mais on ne bascule "offline" qu'apres N cycles.
+      offlineStreak += 1;
+      if (offlineStreak >= OFFLINE_STRIKES_NEEDED && serverState !== "offline") {
+        serverState = "offline";
+      }
     }
 
-    if (prefs.notifyServerBack && lastServerOnline === false && effectiveOnline === true && Notification.isSupported()) {
+    // ── Garde-fous : pas de notif au demarrage ni pendant le redemarrage nocturne ──
+    const graceDemarrage = (Date.now() - SERVER_WATCH_START) < 120000; // 2 min
+    if (justCameBack && prefs.notifyServerBack && !graceDemarrage && !isNightlyRestartWindow() && Notification.isSupported()) {
       new Notification({ title: 'Meytopia', body: 'Le serveur est de retour en ligne !', urgency: 'critical', timeoutType: 'never' }).show();
     }
-    lastServerOnline = effectiveOnline;
 
-    const players = status.online && Array.isArray(status.players) ? status.players : null;
-    if (players && friends.length && lastPlayers && Notification.isSupported()) {
+    // ── Notif « un ami se connecte » (uniquement quand le serveur repond avec une liste) ──
+    const players = online && Array.isArray(status.players) ? status.players : null;
+    if (players && friends.length && lastPlayers && !graceDemarrage && Notification.isSupported()) {
       const own = new Set(accounts.summary().map((a) => String(a.name).toLowerCase()));
       const before = new Set(lastPlayers.map((nick) => nick.toLowerCase()));
       const watched = new Set(friends.map((f) => String(f).toLowerCase()));
@@ -524,6 +530,7 @@ setInterval(async () => {
       }
     }
     if (players) lastPlayers = players;
+    else if (!online) lastPlayers = null; // serveur down : on oublie la liste pour ne pas notifier de faux retours d'amis
   } catch { /* silencieux */ }
 }, 30000);
 
