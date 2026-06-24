@@ -1288,6 +1288,7 @@ async function loadMyStats(force) {
   try { res = await api.app.playerStats(); } catch { res = null; }
   $("#mystats-loading").hidden = true;
   myStatsLoaded = true;
+  if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
   if (!seen) {
@@ -1395,7 +1396,44 @@ function renderMyLeaderboard(ranked, me) {
 }
 $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
 
-/* ── Communauté : pouls, héros du jour (20 catégories), moments ── */
+/* ── Adaptateur de format ──────────────────────────────────────
+   La sonde ecrit un format compact (v4) : d.s = {minute:nb}, d.p = {joueur:[[debut,fin]]}.
+   Cette fonction le reconvertit vers l'ancien format (slots tableau, presence liste d'indices)
+   que tout le code de calcul attend deja. Elle gere AUSSI l'ancien format (retrocompatibilite). */
+function normalizeStatsData(data) {
+  if (!data || !data.days) return data;
+  const out = { ...data, days: {} };
+  for (const [day, d] of Object.entries(data.days)) {
+    // Detecter le format compact : d.s est un objet (pas un tableau)
+    const isCompact = d && d.s && typeof d.s === "object" && !Array.isArray(d.s);
+    if (!isCompact) { out.days[day] = d; continue; } // ancien format : on garde tel quel
+    // Reconstruire slots (tableau 1440) depuis d.s {minute:nb}
+    const slots = Array(1440).fill(null);
+    for (const [min, v] of Object.entries(d.s)) {
+      const i = Number(min);
+      if (i >= 0 && i < 1440) slots[i] = v;
+    }
+    // Reconstruire presence {joueur:[indices]} depuis d.p {joueur:[[debut,fin]]}
+    const presence = {};
+    if (d.p && typeof d.p === "object") {
+      for (const [name, ranges] of Object.entries(d.p)) {
+        const indices = [];
+        if (Array.isArray(ranges)) {
+          for (const r of ranges) {
+            if (Array.isArray(r) && r.length === 2) {
+              for (let i = r[0]; i <= r[1]; i++) indices.push(i);
+            }
+          }
+        }
+        presence[name] = indices;
+      }
+    }
+    out.days[day] = { slots, presence };
+  }
+  return out;
+}
+
+
 let communityLoaded = false;
 
 // Outils de calcul sur le fichier stats (days + seen)
@@ -1606,7 +1644,7 @@ async function loadCommunity(force) {
   $("#community-loading").hidden = true;
   communityLoaded = true;
 
-  const data = res && res.data ? res.data : null;
+  const data = res && res.data ? normalizeStatsData(res.data) : null;
   if (!data || !data.seen || !Object.keys(data.seen).length) {
     const el = $("#community-empty");
     el.hidden = false;
