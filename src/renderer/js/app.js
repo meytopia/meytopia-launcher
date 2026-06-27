@@ -1634,6 +1634,45 @@ function updateHomePulse(status) {
   banner.hidden = false;
 }
 
+// « Qui joue maintenant » à partir de live.json (temps réel publié par la sonde-mod).
+// Renvoie l'objet live s'il est FRAIS (< 5 min), sinon null (sonde en pause → on masque).
+function renderLivePanel(live) {
+  const box = $("#comm-live");
+  if (!box) return null;
+  const fresh = live && live.updatedAt && (Date.now() - new Date(live.updatedAt).getTime() < 5 * 60 * 1000);
+  if (!fresh) { box.hidden = true; return null; }
+  box.hidden = false;
+  const players = Array.isArray(live.players) ? live.players : [];
+  const count = typeof live.count === "number" ? live.count : players.length;
+  $("#comm-live-meta").textContent = live.online
+    ? `${count} en ligne` + (typeof live.tps === "number" ? ` · ${live.tps.toFixed(1)} TPS` : "")
+    : "serveur hors ligne";
+  const list = $("#comm-live-list");
+  list.textContent = "";
+  if (live.online && players.length) {
+    for (const p of players) {
+      const chip = document.createElement("span");
+      chip.className = "player-chip";
+      const img = document.createElement("img");
+      img.alt = "";
+      img.src = `https://mc-heads.net/avatar/${encodeURIComponent(p.uuid || p.name)}/24`;
+      img.addEventListener("error", () => img.remove());
+      const label = document.createElement("span");
+      const since = typeof p.sessionSeconds === "number"
+        ? ` · depuis ${fmtPlayTime(Math.max(1, Math.round(p.sessionSeconds / 60)))}`
+        : "";
+      label.textContent = p.name + since;
+      chip.append(img, label);
+      list.appendChild(chip);
+    }
+  } else {
+    list.textContent = live.online
+      ? "Personne en ligne pour le moment — sois le premier !"
+      : "Le serveur est éteint.";
+  }
+  return live;
+}
+
 async function loadCommunity(force) {
   if (communityLoaded && !force) return;
   $("#community-loading").hidden = false;
@@ -1645,7 +1684,10 @@ async function loadCommunity(force) {
   communityLoaded = true;
 
   const data = res && res.data ? normalizeStatsData(res.data) : null;
-  if (!data || !data.seen || !Object.keys(data.seen).length) {
+  const live = res && res.live ? res.live : null;
+  const liveHasPlayers = live && live.online && Array.isArray(live.players) && live.players.length > 0;
+  const hasSeen = data && data.seen && Object.keys(data.seen).length > 0;
+  if (!hasSeen && !liveHasPlayers) {
     const el = $("#community-empty");
     el.hidden = false;
     el.textContent = "La vie du serveur s'affichera ici dès que des joueurs auront été détectés en jeu.";
@@ -1653,13 +1695,21 @@ async function loadCommunity(force) {
   }
   $("#community-content").hidden = false;
 
-  // Pouls (à partir du dernier relevé du jour)
+  // Qui joue maintenant (temps réel)
+  const liveFresh = renderLivePanel(live);
+
+  // Pouls : live frais prioritaire, sinon dernier relevé du jour
   let lastCount = null, lastOnline = null;
-  const today = statTodayKey();
-  if (data.days && data.days[today]) {
-    const slots = data.days[today].slots || [];
-    for (let i = slots.length - 1; i >= 0; i--) {
-      if (typeof slots[i] === "number") { lastOnline = slots[i] >= 0; lastCount = slots[i] >= 0 ? slots[i] : 0; break; }
+  if (liveFresh) {
+    lastOnline = Boolean(liveFresh.online);
+    lastCount = liveFresh.online ? (liveFresh.count || 0) : 0;
+  } else if (data && data.days) {
+    const today = statTodayKey();
+    if (data.days[today]) {
+      const slots = data.days[today].slots || [];
+      for (let i = slots.length - 1; i >= 0; i--) {
+        if (typeof slots[i] === "number") { lastOnline = slots[i] >= 0; lastCount = slots[i] >= 0 ? slots[i] : 0; break; }
+      }
     }
   }
   const p = pulseMessage(lastOnline, lastCount || 0);
@@ -1667,26 +1717,33 @@ async function loadCommunity(force) {
   $("#comm-pulse-text").textContent = p.text;
   $("#comm-pulse-sub").textContent = p.sub;
 
-  // Héros du jour
-  const metrics = computePlayerMetrics(data);
-  const hero = pickHeroOfDay(metrics);
+  // Héros du jour + Moments (nécessitent l'historique)
   const card = $("#comm-hero-card");
-  if (hero) {
-    card.hidden = false;
-    $("#comm-hero-name").textContent = hero.winner.name;
-    $("#comm-hero-title").textContent = hero.cat.emoji + " " + hero.cat.title;
-    $("#comm-hero-detail").textContent = hero.cat.detail(hero.winner);
+  if (data && data.seen && Object.keys(data.seen).length) {
+    const metrics = computePlayerMetrics(data);
+    const hero = pickHeroOfDay(metrics);
+    if (hero) {
+      card.hidden = false;
+      $("#comm-hero-name").textContent = hero.winner.name;
+      $("#comm-hero-title").textContent = hero.cat.emoji + " " + hero.cat.title;
+      $("#comm-hero-detail").textContent = hero.cat.detail(hero.winner);
+    } else {
+      card.hidden = true;
+    }
+    const moments = detectMoments(data);
+    $("#comm-moments").innerHTML = moments.length
+      ? moments.map((m) => `<div class="comm-moment"><span class="comm-moment-emoji">${m.emoji}</span><div class="comm-moment-body"><div class="comm-moment-text">${escapeHtml(m.text)}</div><div class="comm-moment-when">${escapeHtml(m.when)}</div></div></div>`).join("")
+      : '<div class="muted">Les premiers moments mémorables arrivent bientôt…</div>';
   } else {
     card.hidden = true;
+    $("#comm-moments").innerHTML = '<div class="muted">Les statistiques détaillées arriveront après les premières sessions.</div>';
   }
-
-  // Moments
-  const moments = detectMoments(data);
-  $("#comm-moments").innerHTML = moments.length
-    ? moments.map((m) => `<div class="comm-moment"><span class="comm-moment-emoji">${m.emoji}</span><div class="comm-moment-body"><div class="comm-moment-text">${escapeHtml(m.text)}</div><div class="comm-moment-when">${escapeHtml(m.when)}</div></div></div>`).join("")
-    : '<div class="muted">Les premiers moments mémorables arrivent bientôt…</div>';
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
+// Rafraîchissement auto de l'onglet Communauté (temps réel) quand il est visible.
+setInterval(() => {
+  if (ui.page === "community" && !document.hidden) loadCommunity(true);
+}, 30000);
 
 (async function init() {
   const [settings, info, accountList] = await Promise.all([

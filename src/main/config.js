@@ -7,11 +7,13 @@ const DATA_REPO = 'meytopia-data';
 
 const RAW_BASE = `https://raw.githubusercontent.com/${DATA_OWNER}/${DATA_REPO}/main`;
 const STATS_URL = `https://raw.githubusercontent.com/${DATA_OWNER}/${DATA_REPO}/stats/stats-serveur.json`;
+const LIVE_URL = `https://raw.githubusercontent.com/${DATA_OWNER}/${DATA_REPO}/stats/live.json`;
 
 module.exports = {
   DATA_OWNER,
   DATA_REPO,
   STATS_URL,
+  LIVE_URL,
   REMOTE: {
     launcher: `${RAW_BASE}/launcher.json`,
     news: `${RAW_BASE}/news.json`,

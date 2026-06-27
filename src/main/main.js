@@ -444,20 +444,32 @@ ipcMain.handle('pack:info', async () => {
   } catch { return null; }
 });
 
-// Stats du joueur : telecharge le releve de la sonde (branche stats, lecture seule)
-// et renvoie { me, data } ou me = pseudo Minecraft du compte actif.
+// Stats du joueur : telecharge le releve de la sonde (branche stats, lecture seule).
+// Renvoie { me, data, live } ou me = pseudo Minecraft du compte actif, data = historique
+// (stats-serveur.json) et live = etat temps reel (live.json). Les deux fichiers sont
+// recuperes en parallele ; live peut etre null si la sonde ne le publie pas encore.
 ipcMain.handle('stats:get', async () => {
   try {
-    const { STATS_URL, FETCH_TIMEOUT_MS } = require('./config');
+    const { STATS_URL, LIVE_URL, FETCH_TIMEOUT_MS } = require('./config');
     const active = accounts.summary().find((a) => a.active);
     const me = active ? active.name : null;
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
-    const res = await fetch(STATS_URL + '?nc=' + Date.now(), { signal: ctrl.signal });
+    const [statsR, liveR] = await Promise.allSettled([
+      fetch(STATS_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
+      fetch(LIVE_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
+    ]);
     clearTimeout(to);
-    if (!res.ok) return { me, data: null };
-    return { me, data: await res.json() };
-  } catch { return { me: null, data: null }; }
+    let data = null;
+    let live = null;
+    if (statsR.status === 'fulfilled' && statsR.value.ok) {
+      try { data = await statsR.value.json(); } catch { data = null; }
+    }
+    if (liveR.status === 'fulfilled' && liveR.value.ok) {
+      try { live = await liveR.value.json(); } catch { live = null; }
+    }
+    return { me, data, live };
+  } catch { return { me: null, data: null, live: null }; }
 });
 
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
