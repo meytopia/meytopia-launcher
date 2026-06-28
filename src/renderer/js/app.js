@@ -1368,6 +1368,23 @@ async function loadMyStats(force) {
     ? badges.map((b) => `<span class="mystats-badge">${escapeHtml(b)}</span>`).join("")
     : `<span class="mystats-badge">🌱 Bienvenue sur Meytopia</span>`;
 
+  // Stats en jeu (depuis le mod : morts, mobs, distance, succès…)
+  const mc = meEntry.mc || null;
+  const ig = $("#mystats-ingame");
+  if (ig) {
+    const cards = [];
+    const add = (emo, val, lab) => { if (val != null && val !== 0) cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}</div></div>`); };
+    if (mc) {
+      add("⚔️", mc.mobKills, "mobs tués");
+      add("💀", mc.deaths, "morts");
+      if (typeof mc.distM === "number" && mc.distM > 0) add("🥾", mc.distM >= 1000 ? (mc.distM / 1000).toFixed(1) + " km" : mc.distM + " m", "distance");
+      add("🏆", mc.adv, "succès");
+      add("🗡", mc.playerKills, "duels gagnés");
+      add("🦘", mc.jumps, "sauts");
+    }
+    ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu</div><div class="mystats-cards">${cards.join("")}</div>` : "";
+  }
+
   renderMyLeaderboard(ranked, me);
 }
 function renderMyLeaderboard(ranked, me) {
@@ -1421,7 +1438,7 @@ function deriveIntervalsDay(d) {
       presence[name] = idx;
     }
   }
-  return { slots, presence };
+  return { slots, presence, perf: d.perf || null, up: Array.isArray(d.up) ? d.up : [] };
 }
 
 function normalizeStatsData(data) {
