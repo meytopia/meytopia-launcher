@@ -151,13 +151,15 @@ function refreshPlayButton() {
   const maint = ui.remoteConfig?.maintenance;
   const activeAccount = ui.accounts.find((a) => a.active && !a.needsRelogin);
 
-  if (ui.updater.state === "ready") {
-    set("Redémarrer", "Mise à jour prête — clique pour installer", true);
-    btn.dataset.action = "update-install";
-  } else if (ui.updater.state === "available" || ui.updater.state === "downloading") {
-    set("Mise à jour requise", `Téléchargement… ${ui.updater.percent} %`, false);
-  } else if (minVersionBlocked()) {
-    set("Mise à jour requise", `Version minimale : v${ui.remoteConfig.minLauncherVersion}`, false);
+  if (minVersionBlocked()) {
+    // Mise à jour OBLIGATOIRE : la version installée est sous le minimum exigé par la régie.
+    if (ui.updater.state === "ready") {
+      set("Redémarrer", "Mise à jour requise — installe pour jouer", true);
+      btn.dataset.action = "update-install";
+    } else {
+      const dl = ui.updater.state === "downloading" ? ` · téléchargement ${ui.updater.percent} %` : "";
+      set("Mise à jour requise", `Version minimale : v${ui.remoteConfig.minLauncherVersion}${dl}`, false);
+    }
   } else if (maint?.active && maint?.blockPlay !== false) {
     set("Maintenance", maint.message || "Le serveur est en maintenance", false);
   } else if (ui.remoteOffline && !ui.remoteConfig) {
