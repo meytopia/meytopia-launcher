@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('meytopia', {
     debugInfo: () => ipcRenderer.invoke('app:debugInfo'),
     packInfo: () => ipcRenderer.invoke('pack:info'),
     playerStats: () => ipcRenderer.invoke('stats:get'),
+    liveStatus: () => ipcRenderer.invoke('live:get'),
     systemInfo: () => ipcRenderer.invoke('system:info'),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     uninstall: () => ipcRenderer.invoke('app:uninstall'),

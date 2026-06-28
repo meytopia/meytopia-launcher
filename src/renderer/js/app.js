@@ -1740,9 +1740,23 @@ async function loadCommunity(force) {
   }
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
-// Rafraîchissement auto de l'onglet Communauté (temps réel) quand il est visible.
+
+// Rafraîchissement léger (live.json SEUL) de l'onglet Communauté quand il est visible :
+// met à jour « qui joue maintenant » + le pouls sans retélécharger le gros historique.
+async function refreshCommunityLive() {
+  if ($("#community-content").hidden) return;
+  let live = null;
+  try { live = await api.app.liveStatus(); } catch { live = null; }
+  const liveFresh = renderLivePanel(live);
+  if (liveFresh) {
+    const p = pulseMessage(Boolean(liveFresh.online), liveFresh.online ? (liveFresh.count || 0) : 0);
+    $("#comm-pulse-emoji").textContent = p.emoji;
+    $("#comm-pulse-text").textContent = p.text;
+    $("#comm-pulse-sub").textContent = p.sub;
+  }
+}
 setInterval(() => {
-  if (ui.page === "community" && !document.hidden) loadCommunity(true);
+  if (ui.page === "community" && !document.hidden) refreshCommunityLive();
 }, 30000);
 
 (async function init() {

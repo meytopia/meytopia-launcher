@@ -472,6 +472,20 @@ ipcMain.handle('stats:get', async () => {
   } catch { return { me: null, data: null, live: null }; }
 });
 
+// Etat temps reel SEUL (live.json, petit fichier) — pour le rafraichissement frequent
+// de l'onglet Communaute sans retelecharger le gros stats-serveur.json.
+ipcMain.handle('live:get', async () => {
+  try {
+    const { LIVE_URL, FETCH_TIMEOUT_MS } = require('./config');
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
+    const res = await fetch(LIVE_URL + '?nc=' + Date.now(), { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+});
+
 // Veille serveur (30 s) : « de retour en ligne » (I2) et « un ami se connecte » (J4)
 //
 // Logique anti-faux-positif repensee. Une notif « de retour » n'est envoyee QUE si on a
