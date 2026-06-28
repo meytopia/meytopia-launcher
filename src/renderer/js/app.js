@@ -1404,7 +1404,7 @@ function renderMyLeaderboard(ranked, me) {
     const myIdx = ranked.findIndex((p) => p.name === me);
     if (myIdx >= 10) {
       const p = ranked[myIdx];
-      html += `<div class="mystats-row is-me" style="margin-top:6px;border-top:2px dashed var(--border-strong)">
+      html += `<div class="mystats-row is-me mystats-sep">
         <div class="mystats-rank-badge">${myIdx + 1}</div>
         <div class="mystats-row-name">${escapeHtml(p.name)}<span class="me-tag">toi</span></div>
         <div class="mystats-row-time">${fmtPlayTime(p.minutes)}</div>
@@ -1421,6 +1421,23 @@ $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
    que tout le code de calcul attend deja. Elle gere AUSSI l'ancien format (retrocompatibilite). */
 // Format v5 (intervalles, secondes du jour) -> { slots[1440], presence{nom:[minutes]} }.
 // up = serveur allume (creux a 0), ses = sessions joueurs (compte +1 par minute couverte).
+// Un redemarrage du serveur plus court que ce seuil n'est PAS compte comme une coupure
+// (donnees brutes intactes ; a l'affichage on considere le serveur "reste allume").
+const UP_MERGE_GAP_SEC = 300; // 5 min
+function mergeUp(up, gapSec) {
+  const xs = (Array.isArray(up) ? up : [])
+    .filter((iv) => Array.isArray(iv) && iv.length >= 2 && iv[1] > iv[0])
+    .map((iv) => [iv[0], iv[1]])
+    .sort((a, b) => a[0] - b[0]);
+  if (!xs.length) return [];
+  const out = [xs[0].slice()];
+  for (let i = 1; i < xs.length; i++) {
+    const last = out[out.length - 1];
+    if (xs[i][0] - last[1] <= gapSec) { last[1] = Math.max(last[1], xs[i][1]); } // trou court ou chevauchement -> on prolonge
+    else { out.push(xs[i].slice()); }
+  }
+  return out;
+}
 function deriveIntervalsDay(d) {
   const slots = Array(1440).fill(null);
   const span = (iv, fn) => {
@@ -1429,7 +1446,8 @@ function deriveIntervalsDay(d) {
     const m1 = Math.min(1439, Math.floor((iv[1] - 1) / 60));
     for (let m = m0; m <= m1; m++) fn(m);
   };
-  if (Array.isArray(d.up)) for (const iv of d.up) span(iv, (m) => { if (slots[m] === null) slots[m] = 0; });
+  const up = mergeUp(d.up, UP_MERGE_GAP_SEC); // up fusionne (micro-coupures <= seuil ignorees)
+  for (const iv of up) span(iv, (m) => { if (slots[m] === null) slots[m] = 0; });
   const presence = {};
   if (d.ses && typeof d.ses === "object") {
     for (const [name, arr] of Object.entries(d.ses)) {
@@ -1438,7 +1456,7 @@ function deriveIntervalsDay(d) {
       presence[name] = idx;
     }
   }
-  return { slots, presence, perf: d.perf || null, up: Array.isArray(d.up) ? d.up : [] };
+  return { slots, presence, perf: d.perf || null, up };
 }
 
 function normalizeStatsData(data) {
@@ -1607,15 +1625,15 @@ function renderCommunityRecords(data) {
   const newRecord = todayPeak > 0 && todayPeak > otherPeak;
   if (!peak && !uniques) { box.innerHTML = ""; return; }
   const cards = [
-    ["👥", peak + (peak > 1 ? " joueurs" : " joueur"), "record en simultané" + (peakDay ? (" · " + fmtShortDate(peakDay)) : "")],
-    ["🧑‍🤝‍🧑", String(uniques), "joueurs uniques"],
-    ["⏱", fmtPlayTime(totalMin), "temps de jeu cumulé"],
+    { e: "👥", v: String(peak), l: "joueurs en simultané", sub: "record" + (peakDay ? " · " + fmtShortDate(peakDay) : "") },
+    { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs uniques" : "joueur unique" },
+    { e: "⏱️", v: fmtPlayTime(totalMin), l: "temps de jeu cumulé" },
   ];
   box.innerHTML =
-    (newRecord ? `<div style="background:rgba(124,92,255,.18);border:1px solid rgba(124,92,255,.45);padding:8px 12px;border-radius:10px;font-weight:600;margin-bottom:12px">🎉 Nouveau record : ${todayPeak} joueurs en même temps aujourd'hui !</div>` : "")
+    (newRecord ? `<div class="comm-record-banner">🎉 Nouveau record : ${todayPeak} joueur${todayPeak > 1 ? "s" : ""} en même temps aujourd'hui !</div>` : "")
     + `<div class="comm-moments-title">🏆 Records du serveur</div>`
-    + `<div style="display:flex;flex-wrap:wrap;gap:16px">`
-    + cards.map(([e, v, l]) => `<div style="flex:1;min-width:140px;text-align:center"><div style="font-size:20px;font-weight:700">${e} ${escapeHtml(String(v))}</div><div class="muted" style="font-size:12px">${escapeHtml(l)}</div></div>`).join("")
+    + `<div class="comm-stats-grid">`
+    + cards.map((c) => `<div class="comm-stat"><div class="comm-stat-emoji">${c.e}</div><div class="comm-stat-val">${escapeHtml(c.v)}</div><div class="comm-stat-label">${escapeHtml(c.l)}${c.sub ? `<span class="comm-stat-sub">${escapeHtml(c.sub)}</span>` : ""}</div></div>`).join("")
     + `</div>`;
 }
 
@@ -1639,11 +1657,11 @@ function renderCommunityMc(data) {
       .sort((a, b) => b.v - a.v).slice(0, 3);
     if (ranked.length) any = true;
     const rows = ranked.length
-      ? ranked.map((r, i) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>${i + 1}. ${escapeHtml(r.name)}</span><span class="muted">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
-      : '<div class="muted">—</div>';
-    return `<div style="flex:1;min-width:160px"><div style="font-weight:600;margin-bottom:6px">${m.label}</div>${rows}</div>`;
+      ? ranked.map((r, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(r.name)}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
+      : '<div class="comm-board-empty">Pas encore de données</div>';
+    return `<div class="comm-board"><div class="comm-board-title">${m.label}</div>${rows}</div>`;
   }).join("");
-  box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu</div><div style="display:flex;flex-wrap:wrap;gap:16px">${cols}</div>` : "";
+  box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu</div><div class="comm-boards">${cols}</div>` : "";
 }
 
 // Détection des "moments" du serveur depuis les données
@@ -1662,8 +1680,8 @@ function detectMoments(data) {
     const pk = slots.length ? Math.max(...slots) : 0;
     if (pk > recordPeak) { recordPeak = pk; recordDay = k; }
   }
-  if (recordPeak >= 2) {
-    moments.push({ emoji: "🔥", text: `Record de la saison : ${recordPeak} joueurs en ligne en même temps`, when: recordDay === today ? "aujourd'hui !" : dayLabelFr(recordDay) });
+  if (recordPeak >= 2 && recordDay !== today) {
+    moments.push({ emoji: "🔥", text: `Record de la saison : ${recordPeak} joueurs en ligne en même temps`, when: dayLabelFr(recordDay) });
   }
 
   // 2) Pic du jour même
