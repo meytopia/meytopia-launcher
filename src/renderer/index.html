@@ -249,12 +249,12 @@
           <!-- Records du serveur -->
           <div id="comm-records"></div>
           <!-- Qui joue maintenant (temps réel, live.json) -->
-          <div class="comm-live" id="comm-live" hidden style="margin:14px 0">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span style="font-weight:600">🟢 Qui joue maintenant</span>
-              <span class="muted" id="comm-live-meta" style="font-size:12px"></span>
+          <div class="comm-live" id="comm-live" hidden>
+            <div class="comm-live-head">
+              <span class="comm-live-title">🟢 Qui joue maintenant</span>
+              <span class="muted" id="comm-live-meta"></span>
             </div>
-            <div id="comm-live-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            <div class="comm-live-list" id="comm-live-list"></div>
           </div>
           <!-- Héros du jour -->
           <div class="comm-hero-card" id="comm-hero-card">
