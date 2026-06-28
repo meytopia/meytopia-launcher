@@ -1589,6 +1589,33 @@ function pickHeroOfDay(metrics) {
   return null;
 }
 
+// Classements en jeu (depuis seen[].mc), visibles par tous dans l'onglet Communauté.
+function renderCommunityMc(data) {
+  const box = $("#comm-mc");
+  if (!box) return;
+  const seen = (data && data.seen) ? data.seen : {};
+  const fmtDist = (m) => m >= 1000 ? (m / 1000).toFixed(1) + " km" : m + " m";
+  const metrics = [
+    { key: "mobKills", label: "⚔️ Tueurs de monstres", fmt: (v) => v + " mobs" },
+    { key: "playMin", label: "⏱ Temps en jeu", fmt: (v) => fmtPlayTime(v) },
+    { key: "distM", label: "🥾 Marcheurs", fmt: fmtDist },
+    { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
+  ];
+  let any = false;
+  const cols = metrics.map((m) => {
+    const ranked = Object.entries(seen)
+      .map(([name, s]) => ({ name, v: (s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null }))
+      .filter((x) => x.v != null && x.v > 0)
+      .sort((a, b) => b.v - a.v).slice(0, 3);
+    if (ranked.length) any = true;
+    const rows = ranked.length
+      ? ranked.map((r, i) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>${i + 1}. ${escapeHtml(r.name)}</span><span class="muted">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
+      : '<div class="muted">—</div>';
+    return `<div style="flex:1;min-width:160px"><div style="font-weight:600;margin-bottom:6px">${m.label}</div>${rows}</div>`;
+  }).join("");
+  box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu</div><div style="display:flex;flex-wrap:wrap;gap:16px">${cols}</div>` : "";
+}
+
 // Détection des "moments" du serveur depuis les données
 function detectMoments(data) {
   const moments = [];
@@ -1783,6 +1810,7 @@ async function loadCommunity(force) {
     card.hidden = true;
     $("#comm-moments").innerHTML = '<div class="muted">Les statistiques détaillées arriveront après les premières sessions.</div>';
   }
+  renderCommunityMc(data);
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
 
