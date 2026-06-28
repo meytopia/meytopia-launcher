@@ -1402,11 +1402,37 @@ $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
    La sonde ecrit un format compact (v4) : d.s = {minute:nb}, d.p = {joueur:[[debut,fin]]}.
    Cette fonction le reconvertit vers l'ancien format (slots tableau, presence liste d'indices)
    que tout le code de calcul attend deja. Elle gere AUSSI l'ancien format (retrocompatibilite). */
+// Format v5 (intervalles, secondes du jour) -> { slots[1440], presence{nom:[minutes]} }.
+// up = serveur allume (creux a 0), ses = sessions joueurs (compte +1 par minute couverte).
+function deriveIntervalsDay(d) {
+  const slots = Array(1440).fill(null);
+  const span = (iv, fn) => {
+    if (!Array.isArray(iv) || iv.length < 2) return;
+    const m0 = Math.max(0, Math.floor(iv[0] / 60));
+    const m1 = Math.min(1439, Math.floor((iv[1] - 1) / 60));
+    for (let m = m0; m <= m1; m++) fn(m);
+  };
+  if (Array.isArray(d.up)) for (const iv of d.up) span(iv, (m) => { if (slots[m] === null) slots[m] = 0; });
+  const presence = {};
+  if (d.ses && typeof d.ses === "object") {
+    for (const [name, arr] of Object.entries(d.ses)) {
+      const idx = [];
+      if (Array.isArray(arr)) for (const iv of arr) span(iv, (m) => { slots[m] = (slots[m] || 0) + 1; idx.push(m); });
+      presence[name] = idx;
+    }
+  }
+  return { slots, presence };
+}
+
 function normalizeStatsData(data) {
   if (!data || !data.days) return data;
   const out = { ...data, days: {} };
   for (const [day, d] of Object.entries(data.days)) {
     // Detecter le format compact : d.s est un objet (pas un tableau)
+    if (d && (Array.isArray(d.up) || (d.ses && typeof d.ses === "object"))) {
+      out.days[day] = deriveIntervalsDay(d);
+      continue;
+    }
     const isCompact = d && d.s && typeof d.s === "object" && !Array.isArray(d.s);
     if (!isCompact) { out.days[day] = d; continue; } // ancien format : on garde tel quel
     // Reconstruire slots (tableau 1440) depuis d.s {minute:nb}
