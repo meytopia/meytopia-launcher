@@ -1589,6 +1589,36 @@ function pickHeroOfDay(metrics) {
   return null;
 }
 
+// Records du serveur + détection auto d'un nouveau record de joueurs simultanés (aujourd'hui).
+function renderCommunityRecords(data) {
+  const box = $("#comm-records");
+  if (!box) return;
+  const seen = (data && data.seen) ? data.seen : {};
+  const days = (data && data.days) ? data.days : {};
+  const peakOf = (obj) => { const vals = ((obj && obj.slots) || []).filter((v) => typeof v === "number" && v >= 0); return vals.length ? Math.max(...vals) : 0; };
+  let peak = 0, peakDay = null;
+  for (const [d, obj] of Object.entries(days)) { const pk = peakOf(obj); if (pk > peak) { peak = pk; peakDay = d; } }
+  const uniques = Object.keys(seen).length;
+  let totalMin = 0; for (const s of Object.values(seen)) totalMin += (s.minutes || 0);
+  const today = statTodayKey();
+  const todayPeak = days[today] ? peakOf(days[today]) : 0;
+  let otherPeak = 0;
+  for (const [d, obj] of Object.entries(days)) { if (d === today) continue; const pk = peakOf(obj); if (pk > otherPeak) otherPeak = pk; }
+  const newRecord = todayPeak > 0 && todayPeak > otherPeak;
+  if (!peak && !uniques) { box.innerHTML = ""; return; }
+  const cards = [
+    ["👥", peak + (peak > 1 ? " joueurs" : " joueur"), "record en simultané" + (peakDay ? (" · " + fmtShortDate(peakDay)) : "")],
+    ["🧑‍🤝‍🧑", String(uniques), "joueurs uniques"],
+    ["⏱", fmtPlayTime(totalMin), "temps de jeu cumulé"],
+  ];
+  box.innerHTML =
+    (newRecord ? `<div style="background:rgba(124,92,255,.18);border:1px solid rgba(124,92,255,.45);padding:8px 12px;border-radius:10px;font-weight:600;margin-bottom:12px">🎉 Nouveau record : ${todayPeak} joueurs en même temps aujourd'hui !</div>` : "")
+    + `<div class="comm-moments-title">🏆 Records du serveur</div>`
+    + `<div style="display:flex;flex-wrap:wrap;gap:16px">`
+    + cards.map(([e, v, l]) => `<div style="flex:1;min-width:140px;text-align:center"><div style="font-size:20px;font-weight:700">${e} ${escapeHtml(String(v))}</div><div class="muted" style="font-size:12px">${escapeHtml(l)}</div></div>`).join("")
+    + `</div>`;
+}
+
 // Classements en jeu (depuis seen[].mc), visibles par tous dans l'onglet Communauté.
 function renderCommunityMc(data) {
   const box = $("#comm-mc");
@@ -1810,6 +1840,7 @@ async function loadCommunity(force) {
     card.hidden = true;
     $("#comm-moments").innerHTML = '<div class="muted">Les statistiques détaillées arriveront après les premières sessions.</div>';
   }
+  renderCommunityRecords(data);
   renderCommunityMc(data);
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
