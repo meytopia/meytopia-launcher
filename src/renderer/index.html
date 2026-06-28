@@ -234,7 +234,7 @@
       <section id="page-community" class="page">
         <header class="page-head">
           <h2>Communauté</h2>
-          <button id="community-refresh" class="btn ghost btn-sm">↻ Actualiser</button>
+          <button id="community-refresh" class="ghost-btn small" aria-label="Actualiser la communauté">↻ Actualiser</button>
         </header>
         <div id="community-loading" class="muted">Chargement de la vie du serveur…</div>
         <div id="community-content" hidden>
@@ -275,7 +275,10 @@
       <section id="page-mystats" class="page">
         <header class="page-head">
           <h2>Mes stats</h2>
-          <button id="mystats-refresh" class="btn ghost btn-sm">↻ Actualiser</button>
+          <div style="display:flex;gap:8px">
+            <button id="mystats-share" class="ghost-btn small" hidden aria-label="Partager mon profil">🔗 Partager mon profil</button>
+            <button id="mystats-refresh" class="ghost-btn small" aria-label="Actualiser mes stats">↻ Actualiser</button>
+          </div>
         </header>
         <div id="mystats-loading" class="muted">Chargement de tes statistiques…</div>
         <div id="mystats-content" hidden>

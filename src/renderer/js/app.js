@@ -1267,7 +1267,10 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
 
 /* ── Initialisation ────────────────────────────────────────── */
 /* ── Mes stats ─────────────────────────────────────────────── */
-let myStatsLoaded = false;
+const STATS_STALE_MS = 5 * 60 * 1000; // au-delà, on recharge les stats lourdes au (ré)affichage de l'onglet
+let myStatsFetchedAt = 0;
+let currentMe = null; // pseudo du compte actif (pour le partage de profil)
+const PUBLIC_PROFILE_BASE = "https://meytopia.github.io/meytopia-data/?p=";
 function fmtPlayTime(mins) {
   mins = Math.round(mins || 0);
   if (mins < 60) return mins + " min";
@@ -1282,21 +1285,24 @@ function fmtShortDate(iso) {
   catch { return "—"; }
 }
 async function loadMyStats(force) {
-  if (myStatsLoaded && !force) return;
+  if (!force && myStatsFetchedAt && Date.now() - myStatsFetchedAt < STATS_STALE_MS) return;
   $("#mystats-loading").hidden = false;
   $("#mystats-content").hidden = true;
   $("#mystats-empty").hidden = true;
   let res;
   try { res = await api.app.playerStats(); } catch { res = null; }
   $("#mystats-loading").hidden = true;
-  myStatsLoaded = true;
+  myStatsFetchedAt = Date.now();
   if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
   if (!seen) {
     const el = $("#mystats-empty");
     el.hidden = false;
-    el.textContent = "Statistiques indisponibles pour le moment — réessaie dans un instant.";
+    el.textContent = (typeof navigator !== "undefined" && navigator.onLine === false)
+      ? "Hors ligne — tes statistiques s'afficheront une fois reconnecté."
+      : "Aucune statistique publiée pour l'instant — réessaie dans un instant.";
+    if (!force && myStatsFetchedAt) myStatsFetchedAt = 0; // permettre un re-fetch immédiat au prochain affichage
     return;
   }
   // Classement par minutes (assiduité)
@@ -1307,6 +1313,8 @@ async function loadMyStats(force) {
 
   const me = res.me;
   const meEntry = me ? seen[me] : null;
+  currentMe = me || null;
+  { const sb = $("#mystats-share"); if (sb) sb.hidden = !me; }
 
   if (!me) {
     // Pas de compte actif : on montre quand meme le classement public
@@ -1377,9 +1385,13 @@ async function loadMyStats(force) {
     if (mc) {
       add("⚔️", mc.mobKills, "mobs tués");
       add("💀", mc.deaths, "morts");
-      if (typeof mc.distM === "number" && mc.distM > 0) add("🥾", mc.distM >= 1000 ? (mc.distM / 1000).toFixed(1) + " km" : mc.distM + " m", "distance");
+      const dist = (typeof mc.distTotM === "number" && mc.distTotM > 0) ? mc.distTotM : (typeof mc.distM === "number" ? mc.distM : 0);
+      if (dist > 0) add("🥾", dist >= 1000 ? (dist / 1000).toFixed(1) + " km" : dist + " m", "distance");
+      add("💎", mc.diamonds, "diamants minés");
+      add("🎣", mc.fishCaught, "poissons");
       add("🏆", mc.adv, "succès");
       add("🗡", mc.playerKills, "duels gagnés");
+      if (typeof mc.noDeathMin === "number" && mc.noDeathMin > 0) add("🛡️", fmtPlayTime(mc.noDeathMin), "sans mourir");
       add("🦘", mc.jumps, "sauts");
     }
     ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu</div><div class="mystats-cards">${cards.join("")}</div>` : "";
@@ -1414,6 +1426,9 @@ function renderMyLeaderboard(ranked, me) {
   $("#mystats-leaderboard").innerHTML = html || '<div class="muted">Aucun joueur enregistré pour le moment.</div>';
 }
 $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
+$("#mystats-share").addEventListener("click", () => {
+  if (currentMe && api.app && api.app.openExternal) api.app.openExternal(PUBLIC_PROFILE_BASE + encodeURIComponent(currentMe));
+});
 
 /* ── Adaptateur de format ──────────────────────────────────────
    La sonde ecrit un format compact (v4) : d.s = {minute:nb}, d.p = {joueur:[[debut,fin]]}.
@@ -1497,7 +1512,7 @@ function normalizeStatsData(data) {
 }
 
 
-let communityLoaded = false;
+let communityFetchedAt = 0;
 
 // Outils de calcul sur le fichier stats (days + seen)
 function statMinuteOfDay(slotIndex) { return slotIndex; } // 1 slot = 1 minute (format v3)
@@ -1608,12 +1623,18 @@ function pickHeroOfDay(metrics) {
 }
 
 // Records du serveur + détection auto d'un nouveau record de joueurs simultanés (aujourd'hui).
+// Pic d'un tableau de slots sans spread (évite Math.max(...array) sur 1440 éléments, répété par jour).
+function maxSlot(arr) {
+  let m = 0;
+  if (Array.isArray(arr)) for (const v of arr) if (typeof v === "number" && v > m) m = v;
+  return m;
+}
 function renderCommunityRecords(data) {
   const box = $("#comm-records");
   if (!box) return;
   const seen = (data && data.seen) ? data.seen : {};
   const days = (data && data.days) ? data.days : {};
-  const peakOf = (obj) => { const vals = ((obj && obj.slots) || []).filter((v) => typeof v === "number" && v >= 0); return vals.length ? Math.max(...vals) : 0; };
+  const peakOf = (obj) => maxSlot((obj && obj.slots) || []);
   let peak = 0, peakDay = null;
   for (const [d, obj] of Object.entries(days)) { const pk = peakOf(obj); if (pk > peak) { peak = pk; peakDay = d; } }
   const uniques = Object.keys(seen).length;
@@ -1646,22 +1667,30 @@ function renderCommunityMc(data) {
   const metrics = [
     { key: "mobKills", label: "⚔️ Tueurs de monstres", fmt: (v) => v + " mobs" },
     { key: "playMin", label: "⏱ Temps en jeu", fmt: (v) => fmtPlayTime(v) },
-    { key: "distM", label: "🥾 Marcheurs", fmt: fmtDist },
+    { key: "distTotM", alt: "distM", label: "🥾 Distance parcourue", fmt: fmtDist },
+    { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => v + " minerais" },
+    { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => v + " poissons" },
+    { key: "noDeathMin", label: "🛡️ Série sans mourir", fmt: (v) => fmtPlayTime(v) },
     { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
   ];
   let any = false;
   const cols = metrics.map((m) => {
     const ranked = Object.entries(seen)
-      .map(([name, s]) => ({ name, v: (s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null }))
+      .map(([name, s]) => {
+        let v = (s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null;
+        if (v == null && m.alt && s && s.mc && typeof s.mc[m.alt] === "number") v = s.mc[m.alt];
+        return { name, uuid: (s && s.uuid) || null, v };
+      })
       .filter((x) => x.v != null && x.v > 0)
       .sort((a, b) => b.v - a.v).slice(0, 3);
     if (ranked.length) any = true;
     const rows = ranked.length
-      ? ranked.map((r, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(r.name)}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
+      ? ranked.map((r, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
       : '<div class="comm-board-empty">Pas encore de données</div>';
     return `<div class="comm-board"><div class="comm-board-title">${m.label}</div>${rows}</div>`;
   }).join("");
   box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu</div><div class="comm-boards">${cols}</div>` : "";
+  box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
 }
 
 // Détection des "moments" du serveur depuis les données
@@ -1677,7 +1706,7 @@ function detectMoments(data) {
   let recordPeak = 0, recordDay = null;
   for (const k of dayKeys) {
     const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = slots.length ? Math.max(...slots) : 0;
+    const pk = maxSlot(slots);
     if (pk > recordPeak) { recordPeak = pk; recordDay = k; }
   }
   if (recordPeak >= 2 && recordDay !== today) {
@@ -1687,7 +1716,7 @@ function detectMoments(data) {
   // 2) Pic du jour même
   if (days[today]) {
     const slots = (days[today].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = slots.length ? Math.max(...slots) : 0;
+    const pk = maxSlot(slots);
     if (pk >= 2 && today !== recordDay) moments.push({ emoji: "📈", text: `Aujourd'hui, jusqu'à ${pk} joueurs réunis`, when: "aujourd'hui" });
   }
 
@@ -1717,7 +1746,7 @@ function detectMoments(data) {
   let bestDay = null, bestPeak = 0;
   for (const k of dayKeys) {
     const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = slots.length ? Math.max(...slots) : 0;
+    const pk = maxSlot(slots);
     if (pk > bestPeak) { bestPeak = pk; bestDay = k; }
   }
   if (bestDay && bestPeak >= 2 && bestDay !== recordDay && bestDay !== today) {
@@ -1794,14 +1823,14 @@ function renderLivePanel(live) {
 }
 
 async function loadCommunity(force) {
-  if (communityLoaded && !force) return;
+  if (!force && communityFetchedAt && Date.now() - communityFetchedAt < STATS_STALE_MS) return;
   $("#community-loading").hidden = false;
   $("#community-content").hidden = true;
   $("#community-empty").hidden = true;
   let res;
   try { res = await api.app.playerStats(); } catch { res = null; }
   $("#community-loading").hidden = true;
-  communityLoaded = true;
+  communityFetchedAt = Date.now();
 
   const data = res && res.data ? normalizeStatsData(res.data) : null;
   const live = res && res.live ? res.live : null;

@@ -1353,6 +1353,7 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-rank-1 { background: rgba(251,191,36,.18); color: #FBBF24; }
 .comm-rank-2 { background: rgba(203,213,225,.16); color: #CBD5E1; }
 .comm-rank-3 { background: rgba(217,119,6,.18); color: #D97706; }
+.comm-rank-ava { flex: none; width: 22px; height: 22px; border-radius: 5px; image-rendering: pixelated; }
 .comm-rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .comm-rank-val { flex: none; font-weight: 700; color: var(--accent-hover); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .comm-live {
