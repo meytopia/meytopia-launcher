@@ -60,6 +60,7 @@ const ui = {
   offlinePlay: false,
   game: { state: "idle", text: "" },
   updater: { state: "none", percent: 0 },
+  dismissedUpdateVersion: null, // maj optionnelle masquée par le joueur (« Plus tard ») — par version
   downloads: null,
 };
 
@@ -215,7 +216,11 @@ api.updater.onStatus((status) => {
   ui.updater = status;
   renderUpdateLine();
   renderUpdatePopup();
-  if (status.state === "ready") toast("Mise à jour du launcher prête — clique sur Redémarrer.");
+  if (status.state === "ready" && !updateDismissed()) {
+    toast(minVersionBlocked()
+      ? "Mise à jour requise prête — clique sur Redémarrer."
+      : "Mise à jour du launcher prête — installe quand tu veux (bouton Redémarrer ou Paramètres).");
+  }
   refreshPlayButton();
 });
 
@@ -261,6 +266,8 @@ async function loadRemoteConfig() {
   }
   updateStatusLabel();
   refreshPlayButton();
+  // La config régie peut rendre une maj obligatoire (minLauncherVersion) → réévalue le popup (« Plus tard » retiré si requis).
+  renderUpdatePopup();
 }
 
 $("#btn-discord").addEventListener("click", () => {
@@ -1038,8 +1045,16 @@ function renderUpdateLine() {
   dot.className = `update-dot ${cls}`;
   text.textContent = msg;
   void disabled;
-  btn.disabled = true; // vérification automatique chaque minute : le bouton devient un témoin
-  btn.textContent = u.state === "dev" ? "Indisponible (dev)" : "Automatique — 1 min";
+  if (u.state === "ready") {
+    // Même si le popup a été reporté (« Plus tard »), on garde un bouton pour installer quand on veut.
+    btn.disabled = false;
+    btn.dataset.ready = "1";
+    btn.textContent = "Redémarrer pour installer";
+  } else {
+    btn.disabled = true; // vérification automatique chaque minute : le bouton devient un témoin
+    btn.dataset.ready = "";
+    btn.textContent = u.state === "dev" ? "Indisponible (dev)" : "Automatique — 1 min";
+  }
 }
 
 /** Le launcher est-il sous la version minimale exigée à distance ? (I8) */
@@ -1050,6 +1065,12 @@ function minVersionBlocked() {
   const pb = String(min).split(".").map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0); }
   return false;
+}
+
+/** Maj OPTIONNELLE (non requise par la régie) que le joueur a masquée pour cette version (« Plus tard ») ? */
+function updateDismissed() {
+  const u = ui.updater ?? {};
+  return !minVersionBlocked() && !!u.newVersion && ui.dismissedUpdateVersion === u.newVersion;
 }
 
 /** Compte à rebours lisible : « 2 j 4 h », « 3 h 05 min », « 12 min ». */
@@ -1105,8 +1126,11 @@ function renderUpdatePopup() {
   const pop = $("#update-popup");
   if (!pop) return;
   const u = ui.updater ?? {};
-  const visible = ["available", "downloading", "ready"].includes(u.state);
+  const optional = !minVersionBlocked();
+  const visible = ["available", "downloading", "ready"].includes(u.state) && !updateDismissed();
   pop.hidden = !visible;
+  const later = $("#up-later");
+  if (later) later.hidden = !(visible && optional); // « Plus tard » seulement si la maj n'est pas obligatoire
   if (!visible) { pop.classList.remove("done"); return; }
   const pct = u.state === "ready" ? 100 : Math.max(0, Math.min(100, u.percent ?? 0));
   $("#ring-bar").style.strokeDashoffset = String(RING_CIRC * (1 - pct / 100));
@@ -1133,6 +1157,13 @@ function renderUpdatePopup() {
   $("#up-restart").hidden = u.state !== "ready";
 }
 $("#up-restart").addEventListener("click", () => api.updater.install());
+$("#up-later").addEventListener("click", () => {
+  const v = (ui.updater && ui.updater.newVersion) || null;
+  ui.dismissedUpdateVersion = v;
+  api.settings.set({ dismissedUpdateVersion: v });
+  renderUpdatePopup();
+  toast("Mise à jour reportée — installe-la quand tu veux depuis Paramètres.");
+});
 
 /** En-tête de la page Contenus : version, fichiers, taille du pack (J5). */
 async function loadPackInfo() {
@@ -1176,6 +1207,7 @@ $("#btn-debug-info").addEventListener("click", async () => {
 });
 
 $("#btn-check-update").addEventListener("click", async () => {
+  if ($("#btn-check-update").dataset.ready === "1") { api.updater.install(); return; }
   await api.updater.check();
   toast("Recherche de mise à jour lancée.");
 });
@@ -2229,6 +2261,7 @@ setInterval(() => {
   $("#friends-notify-toggle").checked = friendsNotify;
   renderFriends();
   ui.dismissedEventKey = settings.dismissedEventKey ?? null;
+  ui.dismissedUpdateVersion = settings.dismissedUpdateVersion ?? null;
   $("#ram-hint").textContent = `Recommandé : ${recommended} Go`;
   $("#data-dir-path").textContent = info.dataDir;
 
