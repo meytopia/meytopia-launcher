@@ -19,4 +19,16 @@ const getLauncherDir = () => path.join(getDataDir(), 'launcher');
 const getGameDir = () => path.join(getDataDir(), 'game');
 const getRuntimeDir = () => path.join(getDataDir(), 'runtime');
 
-module.exports = { getConfigDir, getDataDir, getLauncherDir, getGameDir, getRuntimeDir };
+// Sécurité : résout un chemin RELATIF venant du réseau (manifest/optional) en chemin absolu
+// DANS le dossier de jeu. Rejette tout « .. » ou chemin absolu (anti path-traversal :
+// empêche d'écrire/supprimer un fichier hors du dossier de jeu).
+function safeGamePath(rel) {
+  const root = path.resolve(getGameDir());
+  const abs = path.resolve(root, String(rel == null ? '' : rel));
+  if (abs !== root && !abs.startsWith(root + path.sep)) {
+    throw new Error('Chemin hors du dossier de jeu refusé : ' + rel);
+  }
+  return abs;
+}
+
+module.exports = { getConfigDir, getDataDir, getLauncherDir, getGameDir, getRuntimeDir, safeGamePath };

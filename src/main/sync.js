@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { getGameDir, getLauncherDir } = require('./paths');
+const { getGameDir, getLauncherDir, safeGamePath } = require('./paths');
 const downloads = require('./downloads');
 
 const MANAGED_DIRS = ['mods', 'config', 'resourcepacks', 'shaderpacks']; // CDC §6.2
@@ -82,8 +82,10 @@ async function diff(manifest) {
   const manifestPaths = new Set();
 
   for (const file of manifest.files ?? []) {
+    let abs;
+    try { abs = safeGamePath(file.path); }
+    catch (e) { console.warn('[sync] entrée manifest ignorée (chemin refusé) :', file.path); continue; }
     manifestPaths.add(file.path);
-    const abs = path.join(getGameDir(), file.path);
     let needs = true;
     if (fs.existsSync(abs)) {
       try {

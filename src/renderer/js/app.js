@@ -409,9 +409,9 @@ async function loadNews() {
       ${item.pinned ? '<span class="news-pin">Épinglé</span>' : ""}
       <h3>${escapeHtml(item.title)}</h3>
       <p class="news-meta">${escapeHtml(dateText)}${item.author ? " · " + escapeHtml(item.author) : ""}</p>
-      ${item.image ? `<img class="news-image" src="${encodeURI(item.image)}" alt="" />` : ""}
+      ${item.image && /^https:\/\//i.test(item.image) ? `<img class="news-image" src="${escapeHtml(item.image)}" alt="" />` : ""}
       <div class="news-body">${renderMarkdown(item.body ?? "")}</div>
-      ${item.link?.url ? `<a class="news-link" href="${encodeURI(item.link.url)}">${escapeHtml(item.link.label ?? "En savoir plus")}</a>` : ""}
+      ${item.link?.url && /^https:\/\//i.test(item.link.url) ? `<a class="news-link" href="${escapeHtml(item.link.url)}">${escapeHtml(item.link.label ?? "En savoir plus")}</a>` : ""}
     `;
     wrap.appendChild(card);
     readObserver.observe(card);

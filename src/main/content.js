@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { getGameDir, getLauncherDir } = require('./paths');
+const { getGameDir, getLauncherDir, safeGamePath } = require('./paths');
 const downloads = require('./downloads');
 
 const TYPE_DIRS = { mod: 'mods', resourcepack: 'resourcepacks', shaderpack: 'shaderpacks' };
@@ -118,14 +118,14 @@ function importFile(srcPath, type) {
 
 /** Supprime un contenu suivi (ajout perso, détecté ou optionnel). */
 function removeContent(relPath) {
-  fs.rmSync(path.join(getGameDir(), relPath), { force: true });
+  fs.rmSync(safeGamePath(relPath), { force: true }); // garde anti path-traversal sur la suppression
   writeTracked(readTracked().filter((t) => t.path !== relPath));
 }
 
 /* ── Catalogue approuvé (CDC F11) ─────────────────────────── */
 
 async function installOptional(item) {
-  const dest = path.join(getGameDir(), item.file.path);
+  const dest = safeGamePath(item.file.path); // garde anti path-traversal (chemin venant d'optional.json)
   const ok = await downloads.run(item.name, [{
     name: path.basename(item.file.path),
     url: item.file.url,
