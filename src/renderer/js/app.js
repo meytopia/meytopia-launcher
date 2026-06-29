@@ -3,6 +3,7 @@
 // Navigation, état du bouton JOUER, statut serveur, news,
 // contenus, patchnotes, paramètres, volet téléchargements.
 // ============================================================
+// 0.14.0 — release de test (maj optionnelle) : aucun changement fonctionnel.
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
