@@ -1295,6 +1295,7 @@ async function loadMyStats(force) {
   myStatsFetchedAt = Date.now();
   { const cb = $("#mystats-compare"); if (cb) cb.innerHTML = ""; }
   { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = ""; }
+  { const so = $("#mystats-social"); if (so) so.innerHTML = ""; }
   if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
@@ -1389,16 +1390,22 @@ async function loadMyStats(force) {
   const ig = $("#mystats-ingame");
   if (ig) {
     const cards = [];
-    const add = (emo, val, lab) => { if (val != null && val !== 0) cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}</div></div>`); };
+    const add = (emo, val, lab, pctKey, pctRaw) => {
+      if (val != null && val !== 0) {
+        const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null;
+        cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct">top ${pct}%</span>` : ""}</div></div>`);
+      }
+    };
     if (mc) {
-      add("⚔️", mc.mobKills, "mobs tués");
+      add("⚔️", mc.mobKills, "mobs tués", "mobKills", mc.mobKills);
       add("💀", mc.deaths, "morts");
       const dist = (typeof mc.distTotM === "number" && mc.distTotM > 0) ? mc.distTotM : (typeof mc.distM === "number" ? mc.distM : 0);
-      if (dist > 0) add("🥾", dist >= 1000 ? (dist / 1000).toFixed(1) + " km" : dist + " m", "distance");
-      add("💎", mc.diamonds, "diamants minés");
-      add("🎣", mc.fishCaught, "poissons");
-      add("🏆", mc.adv, "succès");
-      add("🗡", mc.playerKills, "duels gagnés");
+      const distKey = (typeof mc.distTotM === "number" && mc.distTotM > 0) ? "distTotM" : "distM";
+      if (dist > 0) add("🥾", dist >= 1000 ? (dist / 1000).toFixed(1) + " km" : dist + " m", "distance", distKey, dist);
+      add("💎", mc.diamonds, "diamants minés", "diamonds", mc.diamonds);
+      add("🎣", mc.fishCaught, "poissons", "fishCaught", mc.fishCaught);
+      add("🏆", mc.adv, "succès", "adv", mc.adv);
+      add("🗡", mc.playerKills, "duels gagnés", "playerKills", mc.playerKills);
       if (typeof mc.noDeathMin === "number" && mc.noDeathMin > 0) add("🛡️", fmtPlayTime(mc.noDeathMin), "sans mourir");
       add("🦘", mc.jumps, "sauts");
     }
@@ -1409,6 +1416,15 @@ async function loadMyStats(force) {
   { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = myPriv
     ? '🔒 Tes stats sont <b>privées</b> (cachées des pages publiques, classements et temps réel). Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
     : '🔓 Tes stats sont <b>publiques</b>. Pour les cacher : tape <code>/meyprivacy cacher</code> en jeu.'; }
+  { const so = $("#mystats-social"); if (so) {
+    const bits = [];
+    const present = presenceByPlayer(res.data)[me];
+    const streak = present ? currentStreak(present, statTodayKey()) : 0;
+    if (streak >= 2) bits.push(`🔥 <b>${streak} jours</b> de connexion d'affilée`);
+    const partner = myTopPartner(res.data, me);
+    if (partner) bits.push(`🤝 Tu joues le plus avec <b>${escapeHtml(partner.partner)}</b> · ${fmtPlayTime(partner.minutes)} ensemble`);
+    so.innerHTML = bits.length ? `<div class="mystats-social-box">${bits.map((b) => `<div>${b}</div>`).join("")}</div>` : "";
+  } }
   renderMyLeaderboard(ranked, me);
   renderFriendCompare(res.data, me);
 }
@@ -1722,6 +1738,160 @@ function renderChallenges(challenges, data) {
   }).join("");
   box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
 }
+// ===== Features communautaires (calculées sur seen/days ; joueurs privés exclus via pubEntries) =====
+function collectiveStats(data) {
+  let mobs = 0, dist = 0, diamonds = 0, fish = 0, minutes = 0, players = 0;
+  for (const [, s] of pubEntries(data)) {
+    players++; minutes += s.minutes || 0;
+    const mc = s.mc || {};
+    mobs += mc.mobKills || 0;
+    dist += (typeof mc.distTotM === "number" ? mc.distTotM : (mc.distM || 0));
+    diamonds += mc.diamonds || 0;
+    fish += mc.fishCaught || 0;
+  }
+  return { mobs, distM: dist, diamonds, fish, minutes, players };
+}
+function collectiveMilestones(c) {
+  const out = [];
+  const pick = (val, paliers, fmt) => { let best = null; for (const p of paliers) if (val >= p) best = p; if (best != null) out.push(fmt(best)); };
+  pick(Math.floor(c.minutes / 60), [50, 100, 250, 500, 1000, 2500, 5000, 10000], (v) => "🎮 " + v.toLocaleString("fr-FR") + " h de jeu cumulées");
+  pick(c.mobs, [1000, 5000, 10000, 50000, 100000], (v) => "⚔️ " + v.toLocaleString("fr-FR") + " monstres terrassés");
+  pick(c.diamonds, [100, 500, 1000, 5000], (v) => "💎 " + v.toLocaleString("fr-FR") + " diamants minés");
+  pick(Math.floor(c.distM / 1000), [100, 500, 1000, 5000, 40075], (v) => "🥾 " + v.toLocaleString("fr-FR") + " km parcourus");
+  return out;
+}
+function renderCollective(data) {
+  const box = $("#comm-collective"); if (!box) return;
+  const c = collectiveStats(data);
+  if (!c.players) { box.innerHTML = ""; return; }
+  const km = Math.round(c.distM / 1000);
+  const earth = c.distM / 1000 / 40075;
+  const cards = [
+    ["🎮", fmtPlayTime(c.minutes), "de jeu cumulé"],
+    ["⚔️", c.mobs.toLocaleString("fr-FR"), "monstres tués"],
+    ["🥾", km.toLocaleString("fr-FR") + " km", earth >= 0.1 ? "soit " + earth.toFixed(1) + "× le tour de la Terre" : "parcourus"],
+    ["💎", c.diamonds.toLocaleString("fr-FR"), "diamants minés"],
+  ];
+  const ms = collectiveMilestones(c);
+  box.innerHTML = `<div class="comm-moments-title">📊 Le serveur en chiffres</div>`
+    + `<div class="comm-stats-grid">`
+    + cards.map(([e, v, l]) => `<div class="comm-stat"><div class="comm-stat-emoji">${e}</div><div class="comm-stat-val">${escapeHtml(v)}</div><div class="comm-stat-label">${escapeHtml(l)}</div></div>`).join("")
+    + `</div>`
+    + (ms.length ? `<div class="comm-milestones">${ms.map((m) => `<span class="comm-milestone">✅ ${escapeHtml(m)}</span>`).join("")}</div>` : "");
+}
+function champions(data) {
+  const cats = [
+    { emoji: "👑", label: "Le plus assidu", get: (s) => s.minutes || 0, fmt: (v) => fmtPlayTime(v) },
+    { emoji: "⚔️", label: "Tueur de monstres", get: (s) => (s.mc && s.mc.mobKills) || 0, fmt: (v) => v + " mobs" },
+    { emoji: "🥾", label: "Grand voyageur", get: (s) => (s.mc && (s.mc.distTotM || s.mc.distM)) || 0, fmt: (v) => v >= 1000 ? (v / 1000).toFixed(1) + " km" : v + " m" },
+    { emoji: "💎", label: "Mineur de diamant", get: (s) => (s.mc && s.mc.diamonds) || 0, fmt: (v) => v + " 💎" },
+    { emoji: "🎣", label: "Pêcheur", get: (s) => (s.mc && s.mc.fishCaught) || 0, fmt: (v) => v + " poissons" },
+    { emoji: "🏆", label: "Chasseur de succès", get: (s) => (s.mc && s.mc.adv) || 0, fmt: (v) => v + " succès" },
+  ];
+  const pub = pubEntries(data);
+  const out = [];
+  for (const cat of cats) {
+    let best = null;
+    for (const [name, s] of pub) { const v = cat.get(s); if (v > 0 && (!best || v > best.v)) best = { name, uuid: s.uuid, v }; }
+    if (best) out.push({ emoji: cat.emoji, label: cat.label, name: best.name, uuid: best.uuid, value: cat.fmt(best.v) });
+  }
+  return out;
+}
+function renderHallOfFame(data) {
+  const box = $("#comm-hof"); if (!box) return;
+  const champs = champions(data);
+  if (!champs.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="comm-moments-title">🏅 Le mur des champions</div><div class="comm-hof-grid">`
+    + champs.map((c) => `<div class="comm-hof-card"><div class="comm-hof-cat">${c.emoji} ${escapeHtml(c.label)}</div>`
+      + `<div class="comm-hof-name"><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(c.uuid || c.name)}/24" alt="">${escapeHtml(c.name)}</div>`
+      + `<div class="comm-hof-val">${escapeHtml(c.value)}</div></div>`).join("")
+    + `</div>`;
+  box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
+}
+function dayKeyShift(dayKey, delta) {
+  const dt = new Date(dayKey + "T12:00:00");
+  dt.setDate(dt.getDate() + delta);
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(dt);
+}
+function presenceByPlayer(data) {
+  const days = (data && data.days) ? data.days : {};
+  const present = {};
+  for (const dk of Object.keys(days)) {
+    const ses = days[dk] && days[dk].ses;
+    if (!ses) continue;
+    for (const name of Object.keys(ses)) {
+      if (Array.isArray(ses[name]) && ses[name].length) (present[name] = present[name] || new Set()).add(dk);
+    }
+  }
+  return present;
+}
+function currentStreak(daySet, today) {
+  let start = today;
+  if (!daySet.has(today)) { const y = dayKeyShift(today, -1); if (daySet.has(y)) start = y; else return 0; }
+  let n = 0, d = start;
+  while (daySet.has(d)) { n++; d = dayKeyShift(d, -1); }
+  return n;
+}
+function computeStreaks(data) {
+  const seen = (data && data.seen) || {}, priv = (data && data.priv) || {};
+  const present = presenceByPlayer(data);
+  const today = statTodayKey();
+  const out = [];
+  for (const name of Object.keys(present)) {
+    const s = seen[name];
+    if (s && s.uuid && priv[s.uuid] === true) continue;
+    const streak = currentStreak(present[name], today);
+    if (streak >= 2) out.push({ name, streak });
+  }
+  return out.sort((a, b) => b.streak - a.streak);
+}
+function renderStreaks(data) {
+  const box = $("#comm-streaks"); if (!box) return;
+  const list = computeStreaks(data).slice(0, 5);
+  if (!list.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="comm-moments-title">🔥 Séries de connexion</div><div class="comm-board">`
+    + list.map((r, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(r.name)}</span><span class="comm-rank-val">${r.streak} jours d'affilée</span></div>`).join("")
+    + `</div>`;
+}
+function sessionOverlapSec(a, b) {
+  let sec = 0;
+  for (const A of a) for (const B of b) { const lo = Math.max(A[0], B[0]), hi = Math.min(A[1], B[1]); if (hi > lo) sec += hi - lo; }
+  return sec;
+}
+function computeDuos(data) {
+  const days = (data && data.days) || {}, seen = (data && data.seen) || {}, priv = (data && data.priv) || {};
+  const isPub = (name) => { const s = seen[name]; return !(s && s.uuid && priv[s.uuid] === true); };
+  const pair = {};
+  for (const dk of Object.keys(days)) {
+    const ses = days[dk] && days[dk].ses; if (!ses) continue;
+    const names = Object.keys(ses).filter((n) => Array.isArray(ses[n]) && ses[n].length && isPub(n));
+    for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+      const ov = sessionOverlapSec(ses[names[i]], ses[names[j]]);
+      if (ov > 0) { const k = names[i] < names[j] ? names[i] + " " + names[j] : names[j] + " " + names[i]; pair[k] = (pair[k] || 0) + ov; }
+    }
+  }
+  return Object.entries(pair).map(([k, sec]) => { const p = k.split(" "); return { a: p[0], b: p[1], minutes: Math.round(sec / 60) }; })
+    .filter((d) => d.minutes > 0).sort((x, y) => y.minutes - x.minutes);
+}
+function renderDuos(data) {
+  const box = $("#comm-duos"); if (!box) return;
+  const list = computeDuos(data).slice(0, 5);
+  if (!list.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="comm-moments-title">🤝 Les meilleurs binômes</div><div class="comm-board">`
+    + list.map((d, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(d.a)} + ${escapeHtml(d.b)}</span><span class="comm-rank-val">${fmtPlayTime(d.minutes)} ensemble</span></div>`).join("")
+    + `</div>`;
+}
+function percentileOf(data, key, myVal) {
+  if (myVal == null || myVal <= 0) return null;
+  const vals = pubEntries(data).map(([, s]) => (s.mc && typeof s.mc[key] === "number") ? s.mc[key] : null).filter((v) => v != null && v > 0);
+  if (vals.length < 3) return null;
+  const rank = vals.filter((v) => v > myVal).length + 1;
+  return Math.max(1, Math.round((rank / vals.length) * 100));
+}
+function myTopPartner(data, me) {
+  const d = computeDuos(data).find((x) => x.a === me || x.b === me);
+  return d ? { partner: d.a === me ? d.b : d.a, minutes: d.minutes } : null;
+}
 function renderCommunityRecords(data) {
   const box = $("#comm-records");
   if (!box) return;
@@ -1993,8 +2163,12 @@ async function loadCommunity(force) {
     $("#comm-moments").innerHTML = '<div class="muted">Les statistiques détaillées arriveront après les premières sessions.</div>';
   }
   renderCommunityRecords(data);
+  renderCollective(data);
   renderChallenges(res && res.challenges ? res.challenges : null, data);
+  renderHallOfFame(data);
   renderCommunityMc(data);
+  renderStreaks(data);
+  renderDuos(data);
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
 

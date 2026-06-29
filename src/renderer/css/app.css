@@ -1357,6 +1357,24 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-rank-ava { flex: none; width: 22px; height: 22px; border-radius: 5px; image-rendering: pixelated; }
 .comm-rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .comm-rank-val { flex: none; font-weight: 700; color: var(--accent-hover); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Le serveur en chiffres (collectif + jalons) */
+.comm-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.comm-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 12px; text-align: center; }
+.comm-stat-emoji { font-size: 22px; }
+.comm-stat-val { font-size: 22px; font-weight: 800; color: var(--accent-hover); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.comm-stat-label { color: var(--text-dim); font-size: 12px; margin-top: 4px; }
+.comm-milestones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.comm-milestone { background: var(--accent-soft); border: 1px solid var(--border-strong); color: var(--accent-hover); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; }
+/* Mur des champions (Hall of Fame) */
+.comm-hof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.comm-hof-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.comm-hof-cat { font-size: 12px; color: var(--text-dim); font-weight: 700; }
+.comm-hof-name { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 8px 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comm-hof-name .comm-rank-ava { width: 24px; height: 24px; }
+.comm-hof-val { font-size: 15px; font-weight: 800; color: var(--accent-hover); font-variant-numeric: tabular-nums; }
+/* Mes stats : percentile + bloc social */
+.mystats-pct { color: var(--accent-hover); font-weight: 700; }
+.mystats-social-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .comm-live {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 12px 14px; margin: 14px 0;
