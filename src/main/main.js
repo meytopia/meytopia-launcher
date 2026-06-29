@@ -453,6 +453,7 @@ ipcMain.handle('stats:get', async () => {
     const { STATS_URL, LIVE_URL, CHALLENGES_URL, FETCH_TIMEOUT_MS } = require('./config');
     const active = accounts.summary().find((a) => a.active);
     const me = active ? active.name : null;
+    const meUuid = active ? active.uuid : null;
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
     const [statsR, liveR, chR] = await Promise.allSettled([
@@ -473,8 +474,8 @@ ipcMain.handle('stats:get', async () => {
     if (chR.status === 'fulfilled' && chR.value.ok) {
       try { challenges = await chR.value.json(); } catch { challenges = null; }
     }
-    return { me, data, live, challenges };
-  } catch { return { me: null, data: null, live: null, challenges: null }; }
+    return { me, meUuid, data, live, challenges };
+  } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null }; }
 });
 
 // Etat temps reel SEUL (live.json, petit fichier) — pour le rafraichissement frequent

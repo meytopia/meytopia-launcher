@@ -1374,6 +1374,8 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-challenge.done .comm-challenge-fill { background: var(--success); }
 .comm-challenge-reward { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
 .mystats-sep { margin-top: 6px; border-top: 2px dashed var(--border-strong); }
+.mystats-privacy { margin: 8px 0 4px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-dim); }
+.mystats-privacy code { background: var(--surface-high); padding: 1px 6px; border-radius: 4px; color: var(--text); font-size: 12px; }
 .mystats-cmp-sel { margin: 4px 0 12px; padding: 7px 10px; background: var(--surface-high); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
 .mystats-cmp-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; font-weight: 700; padding: 4px 0 8px; }
 .mystats-cmp-head span:first-child { text-align: right; color: var(--accent-hover); }

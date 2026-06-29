@@ -1294,6 +1294,7 @@ async function loadMyStats(force) {
   $("#mystats-loading").hidden = true;
   myStatsFetchedAt = Date.now();
   { const cb = $("#mystats-compare"); if (cb) cb.innerHTML = ""; }
+  { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = ""; }
   if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
@@ -1307,7 +1308,7 @@ async function loadMyStats(force) {
     return;
   }
   // Classement par minutes (assiduité)
-  const ranked = Object.entries(seen)
+  const ranked = pubEntries(res.data)
     .map(([name, s]) => ({ name, minutes: s.minutes || 0, first: s.first, last: s.last, days: 0 }))
     .filter((p) => p.minutes > 0)
     .sort((a, b) => b.minutes - a.minutes);
@@ -1334,14 +1335,20 @@ async function loadMyStats(force) {
   $("#mystats-content").hidden = false;
   $("#mystats-name").textContent = me;
 
+  // Joueur en mode privé : ses données sont OMISES du fichier public (donc meEntry absent) → on l'explique.
+  const iAmPrivate = !!(res.data && res.data.priv && res.meUuid && res.data.priv[res.meUuid] === true);
   if (!meEntry || !(meEntry.minutes > 0)) {
-    // Compte connu mais jamais vu sur le serveur
-    $("#mystats-sub").textContent = "Tu n'as pas encore été détecté en jeu — lance une partie !";
-    $("#mystats-time").textContent = "0 min";
-    $("#mystats-days").textContent = "0";
+    $("#mystats-sub").textContent = iAmPrivate
+      ? "Tes stats sont privées — elles ne sont pas publiées."
+      : "Tu n'as pas encore été détecté en jeu — lance une partie !";
+    $("#mystats-time").textContent = iAmPrivate ? "🔒" : "0 min";
+    $("#mystats-days").textContent = iAmPrivate ? "🔒" : "0";
     $("#mystats-rank").textContent = "—";
     $("#mystats-first").textContent = "—";
     $("#mystats-badges").innerHTML = "";
+    { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = iAmPrivate
+      ? '🔒 Tes stats sont <b>privées</b> et ne sont pas publiées. Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
+      : ''; }
     renderMyLeaderboard(ranked, me);
     return;
   }
@@ -1398,6 +1405,10 @@ async function loadMyStats(force) {
     ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu</div><div class="mystats-cards">${cards.join("")}</div>` : "";
   }
 
+  const myPriv = !!(res.data.priv && meEntry.uuid && res.data.priv[meEntry.uuid] === true);
+  { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = myPriv
+    ? '🔒 Tes stats sont <b>privées</b> (cachées des pages publiques, classements et temps réel). Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
+    : '🔓 Tes stats sont <b>publiques</b>. Pour les cacher : tape <code>/meyprivacy cacher</code> en jeu.'; }
   renderMyLeaderboard(ranked, me);
   renderFriendCompare(res.data, me);
 }
@@ -1662,6 +1673,12 @@ function pickHeroOfDay(metrics) {
 }
 
 // Records du serveur + détection auto d'un nouveau record de joueurs simultanés (aujourd'hui).
+// Joueurs PUBLICS uniquement : exclut ceux ayant fait /meyprivacy (data.priv = {uuid:true}).
+function pubEntries(data) {
+  const seen = (data && data.seen) ? data.seen : {};
+  const priv = (data && data.priv) ? data.priv : {};
+  return Object.entries(seen).filter(([, s]) => !(s && s.uuid && priv[s.uuid] === true));
+}
 // Pic d'un tableau de slots sans spread (évite Math.max(...array) sur 1440 éléments, répété par jour).
 function maxSlot(arr) {
   let m = 0;
@@ -1670,14 +1687,14 @@ function maxSlot(arr) {
 }
 // Agrégat (saison courante) pour un défi communautaire.
 function aggChallenge(data, metric) {
-  const seen = (data && data.seen) ? data.seen : {};
-  const sumMc = (k) => Object.values(seen).reduce((a, s) => a + ((s.mc && typeof s.mc[k] === "number") ? s.mc[k] : 0), 0);
+  const pub = pubEntries(data).map(([, s]) => s); // exclut les joueurs privés
+  const sumMc = (k) => pub.reduce((a, s) => a + ((s.mc && typeof s.mc[k] === "number") ? s.mc[k] : 0), 0);
   switch (metric) {
     case "mobKills": return sumMc("mobKills");
     case "diamonds": return sumMc("diamonds");
     case "fishCaught": return sumMc("fishCaught");
-    case "totalPlayMinutes": return Object.values(seen).reduce((a, s) => a + (s.minutes || 0), 0);
-    case "uniquePlayers": return Object.keys(seen).length;
+    case "totalPlayMinutes": return pub.reduce((a, s) => a + (s.minutes || 0), 0);
+    case "uniquePlayers": return pub.length;
     case "peak": return (data && data.records && data.records.peakPlayers && data.records.peakPlayers.value) || 0;
     default: return 0;
   }
@@ -1713,8 +1730,9 @@ function renderCommunityRecords(data) {
   const peakOf = (obj) => maxSlot((obj && obj.slots) || []);
   let peak = 0, peakDay = null;
   for (const [d, obj] of Object.entries(days)) { const pk = peakOf(obj); if (pk > peak) { peak = pk; peakDay = d; } }
-  const uniques = Object.keys(seen).length;
-  let totalMin = 0; for (const s of Object.values(seen)) totalMin += (s.minutes || 0);
+  const pub = pubEntries(data);
+  const uniques = pub.length;
+  let totalMin = 0; for (const [, s] of pub) totalMin += (s.minutes || 0);
   const today = statTodayKey();
   const todayPeak = days[today] ? peakOf(days[today]) : 0;
   let otherPeak = 0;
@@ -1762,7 +1780,7 @@ function renderCommunityMc(data) {
   ];
   let any = false;
   const cols = metrics.map((m) => {
-    const ranked = Object.entries(seen)
+    const ranked = pubEntries(data)
       .map(([name, s]) => {
         let v = (s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null;
         if (v == null && m.alt && s && s.mc && typeof s.mc[m.alt] === "number") v = s.mc[m.alt];

@@ -1,7 +1,7 @@
 {
   "name": "meytopia-launcher",
   "productName": "Meytopia Launcher",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Launcher officiel du serveur Minecraft communautaire Meytopia",
   "main": "src/main/main.js",
   "scripts": {
