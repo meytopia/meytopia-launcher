@@ -1293,6 +1293,7 @@ async function loadMyStats(force) {
   try { res = await api.app.playerStats(); } catch { res = null; }
   $("#mystats-loading").hidden = true;
   myStatsFetchedAt = Date.now();
+  { const cb = $("#mystats-compare"); if (cb) cb.innerHTML = ""; }
   if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
@@ -1398,6 +1399,7 @@ async function loadMyStats(force) {
   }
 
   renderMyLeaderboard(ranked, me);
+  renderFriendCompare(res.data, me);
 }
 function renderMyLeaderboard(ranked, me) {
   const top = ranked.slice(0, 10);
@@ -1424,6 +1426,43 @@ function renderMyLeaderboard(ranked, me) {
     }
   }
   $("#mystats-leaderboard").innerHTML = html || '<div class="muted">Aucun joueur enregistré pour le moment.</div>';
+}
+// Face-à-face : compare mes stats à celles d'un ami (liste d'amis ∩ joueurs connus).
+function renderFriendCompare(data, me) {
+  const box = $("#mystats-compare");
+  if (!box) return;
+  const seen = (data && data.seen) || {};
+  const candidates = friendsList.filter((f) => f && f !== me && seen[f] && ((seen[f].minutes || 0) > 0 || seen[f].mc));
+  if (!me || !seen[me] || !candidates.length) { box.innerHTML = ""; return; }
+  const opts = '<option value="">Me comparer à un ami…</option>' + candidates.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  box.innerHTML = `<div class="mystats-board"><div class="mystats-board-title">⚔️ Face-à-face</div>`
+    + `<select id="mystats-cmp-sel" class="mystats-cmp-sel">${opts}</select><div id="mystats-cmp-table"></div></div>`;
+  const sel = $("#mystats-cmp-sel");
+  if (sel) sel.addEventListener("change", () => renderFriendCompareTable(data, me, sel.value));
+}
+function renderFriendCompareTable(data, me, friend) {
+  const t = $("#mystats-cmp-table");
+  if (!t) return;
+  if (!friend) { t.innerHTML = ""; return; }
+  const seen = (data && data.seen) || {};
+  const A = seen[me] || {}, B = seen[friend] || {};
+  const mcA = A.mc || {}, mcB = B.mc || {};
+  const distOf = (m) => (typeof m.distTotM === "number" ? m.distTotM : (typeof m.distM === "number" ? m.distM : 0));
+  const fmtKm = (m) => m >= 1000 ? (m / 1000).toFixed(1) + " km" : (m || 0) + " m";
+  const rows = [
+    ["Temps de jeu", fmtPlayTime(A.minutes || 0), fmtPlayTime(B.minutes || 0), A.minutes || 0, B.minutes || 0],
+    ["Sessions", A.sessions || 0, B.sessions || 0, A.sessions || 0, B.sessions || 0],
+    ["Mobs tués", mcA.mobKills || 0, mcB.mobKills || 0, mcA.mobKills || 0, mcB.mobKills || 0],
+    ["Distance", fmtKm(distOf(mcA)), fmtKm(distOf(mcB)), distOf(mcA), distOf(mcB)],
+    ["Diamants", mcA.diamonds || 0, mcB.diamonds || 0, mcA.diamonds || 0, mcB.diamonds || 0],
+    ["Succès", mcA.adv || 0, mcB.adv || 0, mcA.adv || 0, mcB.adv || 0],
+    ["Duels gagnés", mcA.playerKills || 0, mcB.playerKills || 0, mcA.playerKills || 0, mcB.playerKills || 0],
+  ];
+  t.innerHTML = `<div class="mystats-cmp-head"><span>${escapeHtml(me)}</span><span></span><span>${escapeHtml(friend)}</span></div>`
+    + rows.map((r) => {
+      const aw = r[3] > r[4] ? " win" : "", bw = r[4] > r[3] ? " win" : "";
+      return `<div class="mystats-cmp-row"><span class="mystats-cmp-a${aw}">${escapeHtml(String(r[1]))}</span><span class="mystats-cmp-lab">${escapeHtml(r[0])}</span><span class="mystats-cmp-b${bw}">${escapeHtml(String(r[2]))}</span></div>`;
+    }).join("");
 }
 $("#mystats-refresh").addEventListener("click", () => loadMyStats(true));
 $("#mystats-share").addEventListener("click", () => {
@@ -1629,6 +1668,43 @@ function maxSlot(arr) {
   if (Array.isArray(arr)) for (const v of arr) if (typeof v === "number" && v > m) m = v;
   return m;
 }
+// Agrégat (saison courante) pour un défi communautaire.
+function aggChallenge(data, metric) {
+  const seen = (data && data.seen) ? data.seen : {};
+  const sumMc = (k) => Object.values(seen).reduce((a, s) => a + ((s.mc && typeof s.mc[k] === "number") ? s.mc[k] : 0), 0);
+  switch (metric) {
+    case "mobKills": return sumMc("mobKills");
+    case "diamonds": return sumMc("diamonds");
+    case "fishCaught": return sumMc("fishCaught");
+    case "totalPlayMinutes": return Object.values(seen).reduce((a, s) => a + (s.minutes || 0), 0);
+    case "uniquePlayers": return Object.keys(seen).length;
+    case "peak": return (data && data.records && data.records.peakPlayers && data.records.peakPlayers.value) || 0;
+    default: return 0;
+  }
+}
+function renderChallenges(challenges, data) {
+  const box = $("#comm-challenges");
+  if (!box) return;
+  const list = (challenges && Array.isArray(challenges.challenges)) ? challenges.challenges : [];
+  const now = Date.now();
+  const active = list.filter((c) => c && c.target > 0
+    && (!c.from || new Date(c.from).getTime() <= now)
+    && (!c.to || new Date(c.to).getTime() >= now));
+  if (!active.length) { box.innerHTML = ""; return; }
+  const fmtV = (metric, v) => metric === "totalPlayMinutes" ? fmtPlayTime(v) : String(v);
+  box.innerHTML = `<div class="comm-moments-title">🎯 Défis communautaires</div>` + active.map((c) => {
+    const cur = aggChallenge(data, c.metric);
+    const pct = Math.max(0, Math.min(100, Math.round(cur / c.target * 100)));
+    const done = cur >= c.target;
+    return `<div class="comm-challenge${done ? " done" : ""}">`
+      + `<div class="comm-challenge-head"><span>${escapeHtml(c.title || "Défi")}</span>`
+      + `<span class="comm-challenge-num">${escapeHtml(fmtV(c.metric, Math.min(cur, c.target)))} / ${escapeHtml(fmtV(c.metric, c.target))}${done ? " ✓" : ""}</span></div>`
+      + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${pct}"></div></div>`
+      + (c.reward ? `<div class="comm-challenge-reward">🎁 ${escapeHtml(c.reward)}</div>` : "")
+      + `</div>`;
+  }).join("");
+  box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
+}
 function renderCommunityRecords(data) {
   const box = $("#comm-records");
   if (!box) return;
@@ -1644,15 +1720,26 @@ function renderCommunityRecords(data) {
   let otherPeak = 0;
   for (const [d, obj] of Object.entries(days)) { if (d === today) continue; const pk = peakOf(obj); if (pk > otherPeak) otherPeak = pk; }
   const newRecord = todayPeak > 0 && todayPeak > otherPeak;
-  if (!peak && !uniques) { box.innerHTML = ""; return; }
+  const rec = (data && data.records) ? data.records : {};
+  const season = (data && data.server && typeof data.server.season === "number") ? data.server.season : null;
+  // Pic : record DATÉ persisté par le mod si dispo (autoritaire), sinon dérivé des jours.
+  let peakVal = peak, peakWhen = peakDay ? fmtShortDate(peakDay) : null;
+  if (rec.peakPlayers && typeof rec.peakPlayers.value === "number" && rec.peakPlayers.value >= peak) {
+    peakVal = rec.peakPlayers.value;
+    peakWhen = rec.peakPlayers.day ? fmtShortDate(rec.peakPlayers.day) : (rec.peakPlayers.at ? fmtShortDate(rec.peakPlayers.at) : peakWhen);
+  }
+  if (!peakVal && !uniques) { box.innerHTML = ""; return; }
   const cards = [
-    { e: "👥", v: String(peak), l: "joueurs en simultané", sub: "record" + (peakDay ? " · " + fmtShortDate(peakDay) : "") },
+    { e: "👥", v: String(peakVal), l: "joueurs en simultané", sub: "record" + (peakWhen ? " · " + peakWhen : "") },
     { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs uniques" : "joueur unique" },
     { e: "⏱️", v: fmtPlayTime(totalMin), l: "temps de jeu cumulé" },
   ];
+  if (rec.longestSession && typeof rec.longestSession.minutes === "number" && rec.longestSession.minutes > 0) {
+    cards.push({ e: "🏃", v: fmtPlayTime(rec.longestSession.minutes), l: "plus longue session", sub: rec.longestSession.player ? "par " + rec.longestSession.player : "" });
+  }
   box.innerHTML =
     (newRecord ? `<div class="comm-record-banner">🎉 Nouveau record : ${todayPeak} joueur${todayPeak > 1 ? "s" : ""} en même temps aujourd'hui !</div>` : "")
-    + `<div class="comm-moments-title">🏆 Records du serveur</div>`
+    + `<div class="comm-moments-title">🏆 Records du serveur${season ? ` · Saison ${season}` : ""}</div>`
     + `<div class="comm-stats-grid">`
     + cards.map((c) => `<div class="comm-stat"><div class="comm-stat-emoji">${c.e}</div><div class="comm-stat-val">${escapeHtml(c.v)}</div><div class="comm-stat-label">${escapeHtml(c.l)}${c.sub ? `<span class="comm-stat-sub">${escapeHtml(c.sub)}</span>` : ""}</div></div>`).join("")
     + `</div>`;
@@ -1888,6 +1975,7 @@ async function loadCommunity(force) {
     $("#comm-moments").innerHTML = '<div class="muted">Les statistiques détaillées arriveront après les premières sessions.</div>';
   }
   renderCommunityRecords(data);
+  renderChallenges(res && res.challenges ? res.challenges : null, data);
   renderCommunityMc(data);
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));

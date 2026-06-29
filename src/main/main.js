@@ -450,26 +450,31 @@ ipcMain.handle('pack:info', async () => {
 // recuperes en parallele ; live peut etre null si la sonde ne le publie pas encore.
 ipcMain.handle('stats:get', async () => {
   try {
-    const { STATS_URL, LIVE_URL, FETCH_TIMEOUT_MS } = require('./config');
+    const { STATS_URL, LIVE_URL, CHALLENGES_URL, FETCH_TIMEOUT_MS } = require('./config');
     const active = accounts.summary().find((a) => a.active);
     const me = active ? active.name : null;
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
-    const [statsR, liveR] = await Promise.allSettled([
+    const [statsR, liveR, chR] = await Promise.allSettled([
       fetch(STATS_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
       fetch(LIVE_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
+      fetch(CHALLENGES_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
     ]);
     clearTimeout(to);
     let data = null;
     let live = null;
+    let challenges = null;
     if (statsR.status === 'fulfilled' && statsR.value.ok) {
       try { data = await statsR.value.json(); } catch { data = null; }
     }
     if (liveR.status === 'fulfilled' && liveR.value.ok) {
       try { live = await liveR.value.json(); } catch { live = null; }
     }
-    return { me, data, live };
-  } catch { return { me: null, data: null, live: null }; }
+    if (chR.status === 'fulfilled' && chR.value.ok) {
+      try { challenges = await chR.value.json(); } catch { challenges = null; }
+    }
+    return { me, data, live, challenges };
+  } catch { return { me: null, data: null, live: null, challenges: null }; }
 });
 
 // Etat temps reel SEUL (live.json, petit fichier) — pour le rafraichissement frequent

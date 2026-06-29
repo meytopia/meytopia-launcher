@@ -1363,4 +1363,22 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-live-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .comm-live-title { font-weight: 700; font-size: 14px; }
 .comm-live-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.comm-challenge { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.comm-challenge.done { border-color: rgba(52,211,153,.45); }
+.comm-challenge-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.comm-challenge-num { color: var(--accent-hover); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.comm-challenge.done .comm-challenge-num { color: var(--success); }
+.comm-challenge-bar { height: 8px; background: var(--surface-high); border-radius: 999px; overflow: hidden; }
+.comm-challenge-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 999px; transition: width .4s ease; }
+.comm-challenge.done .comm-challenge-fill { background: var(--success); }
+.comm-challenge-reward { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
 .mystats-sep { margin-top: 6px; border-top: 2px dashed var(--border-strong); }
+.mystats-cmp-sel { margin: 4px 0 12px; padding: 7px 10px; background: var(--surface-high); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
+.mystats-cmp-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; font-weight: 700; padding: 4px 0 8px; }
+.mystats-cmp-head span:first-child { text-align: right; color: var(--accent-hover); }
+.mystats-cmp-head span:last-child { text-align: left; color: var(--accent-hover); }
+.mystats-cmp-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); }
+.mystats-cmp-a { text-align: right; font-variant-numeric: tabular-nums; }
+.mystats-cmp-b { text-align: left; font-variant-numeric: tabular-nums; }
+.mystats-cmp-lab { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.mystats-cmp-a.win, .mystats-cmp-b.win { color: var(--success); font-weight: 700; }
