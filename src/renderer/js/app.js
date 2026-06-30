@@ -153,6 +153,12 @@ function refreshPlayButton() {
   const maint = ui.remoteConfig?.maintenance;
   const activeAccount = ui.accounts.find((a) => a.active && !a.needsRelogin);
 
+  const gate = gateInfo();
+  if (gate) {
+    const d = new Date(gate.at).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+    set("Bientôt", `Ouverture ${d} · dans ${fmtCountdown(gate.at - Date.now())}`, false);
+    return;
+  }
   if (minVersionBlocked()) {
     // Mise à jour OBLIGATOIRE : la version installée est sous le minimum exigé par la régie.
     if (ui.updater.state === "ready") {
@@ -194,6 +200,7 @@ async function onPlayClick() {
   const reasons = {
     "no-account": "Aucun compte actif — direction Paramètres.",
     maintenance: "Le serveur est en maintenance.",
+    "not-open": "Le serveur n'est pas encore ouvert — patiente jusqu'à la date d'ouverture.",
     "offline-no-cache": "Hors ligne et aucune installation vérifiée : impossible de lancer.",
     "download-interrupted": "Téléchargement interrompu — bouton Relancer dans le volet.",
     blocked: "Des fichiers interdits bloquent le lancement.",
@@ -1105,6 +1112,14 @@ function minVersionBlocked() {
   return false;
 }
 
+/** Verrou « serveur pas encore ouvert » actif ? (null si pas de gate ou date passée = ouvert) */
+function gateInfo() {
+  const g = ui.remoteConfig && ui.remoteConfig.gate;
+  if (!g || !g.openAt) return null;
+  const t = Date.parse(g.openAt);
+  if (!Number.isFinite(t) || Date.now() >= t) return null;
+  return { at: t, title: g.title || "Ouverture bientôt", message: g.message || "" };
+}
 /** Maj OPTIONNELLE (non requise par la régie) que le joueur a masquée pour cette version (« Plus tard ») ? */
 function updateDismissed() {
   const u = ui.updater ?? {};
@@ -1157,6 +1172,8 @@ function renderEventBanner(config) {
   banner.hidden = false;
 }
 setInterval(() => { if (ui.remoteConfig) renderEventBanner(ui.remoteConfig); }, 30000);
+// Compte à rebours du verrou d'ouverture + auto-ouverture (re-rend le bouton tant qu'un gate est configuré).
+setInterval(() => { if (ui.remoteConfig && ui.remoteConfig.gate) refreshPlayButton(); }, 30000);
 
 /* ── Popup de mise à jour : l'anneau Meytopia ──────────────── */
 const RING_CIRC = 289.03; // 2πr, r = 46

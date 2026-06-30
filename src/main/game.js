@@ -54,6 +54,11 @@ async function play() {
   if (config.maintenance?.active && config.maintenance?.blockPlay !== false) {
     return { ok: false, reason: 'maintenance' };
   }
+  // Verrou « serveur pas encore ouvert » : bloque tant qu'on est avant la date d'ouverture (I-gate)
+  if (config.gate && config.gate.openAt) {
+    const t = Date.parse(config.gate.openAt);
+    if (Number.isFinite(t) && Date.now() < t) return { ok: false, reason: 'not-open' };
+  }
 
   // 3) Synchronisation du modpack (CDC F5) — delta uniquement
   setState('syncing', 'Vérification des fichiers du modpack…');
