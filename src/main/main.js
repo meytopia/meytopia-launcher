@@ -430,10 +430,8 @@ ipcMain.handle('app:debugInfo', async () => {
 // Infos du modpack pour l'en-tête de Contenus (J5)
 ipcMain.handle('pack:info', async () => {
   try {
-    const [{ data: config }, { data: manifest }] = await Promise.all([
-      remote.getLauncherConfig(),
-      remote.getManifest(),
-    ]);
+    const { data: config } = await remote.getLauncherConfig();
+    const { data: manifest } = await remote.getManifest(config?.modpack?.manifestUrl);
     const files = manifest?.files ?? [];
     if (!files.length) return null;
     return {

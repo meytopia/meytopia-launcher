@@ -35,6 +35,7 @@ function queryFullStat(host, port, timeoutMs = 4000) {
       if (msg[0] === 0x09) {
         // Réponse au handshake : jeton en ASCII terminé par \0
         const token = parseInt(msg.toString('ascii', 5, msg.length - 1), 10);
+        if (!Number.isInteger(token)) { return done(new Error('jeton de handshake invalide')); }
         const tokenBuf = Buffer.alloc(4);
         tokenBuf.writeInt32BE(token);
         // 2) Full stat : type 0x00 + session + jeton + padding 4 octets

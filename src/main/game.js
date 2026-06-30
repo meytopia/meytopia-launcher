@@ -61,6 +61,7 @@ async function play() {
   }
 
   // 3) Synchronisation du modpack (CDC F5) — delta uniquement
+  if (!config.modpack || !config.modpack.manifestUrl) return { ok: false, reason: 'offline-no-cache' };
   setState('syncing', 'Vérification des fichiers du modpack…');
   const { data: manifest } = await remote.getManifest(config.modpack.manifestUrl);
   if (!manifest) return { ok: false, reason: 'offline-no-cache' };

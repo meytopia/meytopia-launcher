@@ -196,7 +196,7 @@ async function onPlayClick() {
   if (action !== "play") return;
 
   const result = await api.game.play();
-  if (result.ok) return;
+  if (!result || result.ok) return;
   const reasons = {
     "no-account": "Aucun compte actif — direction Paramètres.",
     maintenance: "Le serveur est en maintenance.",
