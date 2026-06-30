@@ -1790,7 +1790,9 @@ function maxSlot(arr) {
 }
 // Agrégat (saison courante) pour un défi communautaire.
 function aggChallenge(data, metric) {
-  const pub = pubEntries(data).map(([, s]) => s); // exclut les joueurs privés
+  // Total communautaire anonyme publié par la sonde (inclut les joueurs privés) → barre = déclenchement réel.
+  if (data && data.agg && typeof data.agg[metric] === "number") return data.agg[metric];
+  const pub = pubEntries(data).map(([, s]) => s); // repli (anciennes données sans agg) : exclut les joueurs privés
   const sumMc = (k) => pub.reduce((a, s) => a + ((s.mc && typeof s.mc[k] === "number") ? s.mc[k] : 0), 0);
   switch (metric) {
     case "mobKills": return sumMc("mobKills");
