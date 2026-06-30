@@ -186,6 +186,7 @@
             <p class="eyebrow">Mes ajouts</p>
             <button id="btn-add-files" class="ghost-btn small">Ajouter un fichier</button>
           </div>
+          <p class="page-desc" style="margin-top:0">Astuce : <b>glisse-dépose</b> un <b>.jar</b> (mod) ou un <b>.zip</b> (resourcepack / shaderpack) n'importe où sur cette page.</p>
           <div id="local-list"></div>
         </div>
       </section>
@@ -425,6 +426,30 @@
               <span class="setting-hint">Copie tes infos techniques et colle-les sur le Discord pour un diagnostic rapide</span>
             </div>
             <button class="ghost-btn" id="btn-debug-info">Copier les infos de débogage</button>
+          </div>
+          <div class="setting-row" style="display:block">
+            <span class="setting-name">Aide rapide — pannes courantes</span>
+            <div class="help-list" id="help-list">
+              <details><summary>Minecraft ne se lance pas / écran d'erreur</summary>
+                <p>Souvent un fichier abîmé. Lance une vérification : elle re-télécharge ce qui manque.</p>
+                <button class="ghost-btn small" data-help="fullcheck">Vérification complète</button></details>
+              <details><summary>Le jeu plante juste après le lancement</summary>
+                <p>Un mod ajouté à la main peut être en cause. Ouvre le dossier mods, retire l'ajout récent, puis relance.</p>
+                <button class="ghost-btn small" data-help="open-mods">Ouvrir le dossier mods</button></details>
+              <details><summary>Je n'ai pas la dernière version / mise à jour bloquée</summary>
+                <p>Relance la recherche de mise à jour. Si une maj est prête, le bouton « Redémarrer » apparaît.</p>
+                <button class="ghost-btn small" data-help="check-update">Rechercher les mises à jour</button></details>
+              <details><summary>« Des fichiers interdits bloquent le lancement »</summary>
+                <p>Un contenu n'est pas autorisé sur le serveur. Le launcher propose de le supprimer au lancement — accepte, puis rejoue.</p></details>
+              <details><summary>Espace disque insuffisant</summary>
+                <p>Libère de la place (le pack fait plusieurs Go) ou déplace le dossier du jeu (réglage plus bas), puis relance la vérification.</p>
+                <button class="ghost-btn small" data-help="fullcheck">Vérification complète</button></details>
+              <details><summary>Le serveur est en maintenance</summary>
+                <p>Le bouton Jouer est bloqué le temps d'une mise à jour serveur. Réessaie un peu plus tard.</p></details>
+              <details><summary>Rien ne marche ?</summary>
+                <p>Copie tes infos techniques et partage-les pour un diagnostic rapide.</p>
+                <button class="ghost-btn small" data-help="debug">Copier les infos de débogage</button></details>
+            </div>
           </div>
           <div class="setting-row">
             <div class="setting-meta">

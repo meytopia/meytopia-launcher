@@ -82,6 +82,9 @@ async function diff(manifest) {
   const manifestPaths = new Set();
 
   for (const file of manifest.files ?? []) {
+    // Mod désactivé depuis la régie (enabled:false) : on ne le télécharge pas, et on le marque
+    // comme "connu" pour ne pas le signaler hors-modpack (sa suppression éventuelle passe par la blocklist).
+    if (file && file.enabled === false) { if (file.path) manifestPaths.add(file.path); continue; }
     let abs;
     try { abs = safeGamePath(file.path); }
     catch (e) { console.warn('[sync] entrée manifest ignorée (chemin refusé) :', file.path); continue; }

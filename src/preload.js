@@ -2,7 +2,7 @@
 // Meytopia Launcher — Preload
 // Pont sécurisé interface ↔ principal (liste blanche, CDC §3.1).
 // ============================================================
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const on = (channel) => (callback) =>
   ipcRenderer.on(channel, (_event, payload) => callback(payload));
@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('meytopia', {
     list: () => ipcRenderer.invoke('content:list'),
     pick: () => ipcRenderer.invoke('content:pick'),
     import: (items) => ipcRenderer.invoke('content:import', items),
+    pathForFile: (file) => webUtils.getPathForFile(file), // chemin absolu d'un fichier glissé-déposé (Electron 42)
     remove: (relPath) => ipcRenderer.invoke('content:remove', relPath),
     openFolder: (dirName) => ipcRenderer.invoke('content:openFolder', dirName),
     deleteBlocked: (paths) => ipcRenderer.invoke('blocklist:delete', paths),

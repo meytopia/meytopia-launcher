@@ -561,11 +561,11 @@ api.content.onUnknown((paths) => {
 });
 
 // Ajout de fichiers : .jar → mods ; .zip → choix resourcepack/shaderpack
-$("#btn-add-files").addEventListener("click", async () => {
-  const picked = await api.content.pick();
-  if (!picked.length) return;
+async function importPicked(picked) {
+  if (!picked || !picked.length) return;
   const jars = picked.filter((p) => p.ext === ".jar").map((p) => ({ src: p.src, type: "mod" }));
   const zips = picked.filter((p) => p.ext === ".zip");
+  if (!jars.length && !zips.length) { toast("Seuls les fichiers .jar (mods) et .zip (packs) sont acceptés."); return; }
 
   const finish = async (zipType) => {
     const items = [...jars, ...zips.map((z) => ({ src: z.src, type: zipType }))];
@@ -580,7 +580,44 @@ $("#btn-add-files").addEventListener("click", async () => {
   $("#zip-rp").onclick = () => { $("#zip-modal").hidden = true; finish("resourcepack"); };
   $("#zip-sp").onclick = () => { $("#zip-modal").hidden = true; finish("shaderpack"); };
   $("#zip-cancel").onclick = () => { $("#zip-modal").hidden = true; if (jars.length) finish(null); };
+}
+$("#btn-add-files").addEventListener("click", async () => { importPicked(await api.content.pick()); });
+
+// Aide rapide (#14) : chaque bouton réutilise une action existante du launcher.
+if ($("#help-list")) $("#help-list").addEventListener("click", (e) => {
+  const a = e.target && e.target.dataset ? e.target.dataset.help : null;
+  if (!a) return;
+  if (a === "fullcheck") $("#btn-fullcheck") && $("#btn-fullcheck").click();
+  else if (a === "open-mods") api.content.openFolder("mods");
+  else if (a === "check-update") $("#btn-check-update") && $("#btn-check-update").click();
+  else if (a === "debug") $("#btn-debug-info") && $("#btn-debug-info").click();
 });
+
+// Glisser-déposer des fichiers sur la page Contenus (#13). Electron 42 : chemin via webUtils.
+(function setupContentDrop() {
+  const zone = $("#page-content");
+  if (!zone) return;
+  const show = (e) => {
+    if (!e.dataTransfer || ![...e.dataTransfer.items].some((it) => it.kind === "file")) return;
+    e.preventDefault();
+    zone.classList.add("drop-active");
+  };
+  zone.addEventListener("dragover", show);
+  zone.addEventListener("dragenter", show);
+  zone.addEventListener("dragleave", (e) => { if (e.target === zone) zone.classList.remove("drop-active"); });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("drop-active");
+    const files = e.dataTransfer ? [...e.dataTransfer.files] : [];
+    const picked = files.map((f) => {
+      let src = "";
+      try { src = api.content.pathForFile(f); } catch { src = ""; }
+      return { src, name: f.name, ext: "." + (f.name.split(".").pop() || "").toLowerCase() };
+    }).filter((p) => p.src && (p.ext === ".jar" || p.ext === ".zip"));
+    if (!picked.length) { toast("Glisse un fichier .jar (mod) ou .zip (resourcepack / shaderpack)."); return; }
+    importPicked(picked);
+  });
+})();
 
 /* ── Blocklist (CDC F6) ────────────────────────────────────── */
 let blockedPaths = [];
