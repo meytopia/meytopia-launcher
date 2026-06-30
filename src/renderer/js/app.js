@@ -1624,7 +1624,7 @@ function deriveIntervalsDay(d) {
       presence[name] = idx;
     }
   }
-  return { slots, presence, perf: d.perf || null, up };
+  return { slots, presence, perf: d.perf || null, up, ses: d.ses || {} };
 }
 
 function normalizeStatsData(data) {
