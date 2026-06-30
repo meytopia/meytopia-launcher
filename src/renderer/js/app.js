@@ -1412,6 +1412,7 @@ async function loadMyStats(force) {
     $("#mystats-name").textContent = "Connecte-toi pour voir tes stats";
     $("#mystats-sub").textContent = "le classement public reste visible ci-dessous";
     $("#mystats-time").textContent = "—";
+    $("#mystats-total").textContent = "—";
     $("#mystats-days").textContent = "—";
     $("#mystats-rank").textContent = "—";
     $("#mystats-first").textContent = "—";
@@ -1430,6 +1431,7 @@ async function loadMyStats(force) {
       ? "Tes stats sont privées — elles ne sont pas publiées."
       : "Tu n'as pas encore été détecté en jeu — lance une partie !";
     $("#mystats-time").textContent = iAmPrivate ? "🔒" : "0 min";
+    $("#mystats-total").textContent = iAmPrivate ? "🔒" : "0 min";
     $("#mystats-days").textContent = iAmPrivate ? "🔒" : "0";
     $("#mystats-rank").textContent = "—";
     $("#mystats-first").textContent = "—";
@@ -1453,6 +1455,7 @@ async function loadMyStats(force) {
 
   $("#mystats-sub").textContent = "cette saison sur Meytopia";
   $("#mystats-time").textContent = fmtPlayTime(meEntry.minutes);
+  $("#mystats-total").textContent = meEntry.totalMin ? fmtPlayTime(meEntry.totalMin) : "—";
   $("#mystats-days").textContent = String(dayCount);
   $("#mystats-rank").textContent = rank ? "#" + rank : "—";
   $("#mystats-first").textContent = fmtShortDate(meEntry.first);
