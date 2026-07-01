@@ -1630,6 +1630,8 @@ function deriveIntervalsDay(d) {
   return { slots, presence, perf: d.perf || null, up, ses: d.ses || {} };
 }
 
+// ⚠️ SYNCHRO : ce trio (mergeUp/deriveIntervalsDay/normalizeStatsData) existe aussi dans la RÉGIE
+// (meytopia-data/admin/index.html). Tout changement de format v5 doit être répercuté DANS LES DEUX.
 function normalizeStatsData(data) {
   if (!data || !data.days) return data;
   const out = { ...data, days: {} };
