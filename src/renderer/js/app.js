@@ -541,7 +541,7 @@ async function loadContent() {
           <span class="row-name">${escapeHtml(item.name)}</span>
           <span class="row-sub">${escapeHtml(item.description ?? "")}</span>
         </div>
-        <span class="row-badge">${escapeHtml(TYPE_LABELS[item.type] ?? item.type)}</span>`;
+        <span class="row-badge">${item.lib ? "bibliothèque" : escapeHtml(TYPE_LABELS[item.type] ?? item.type)}</span>`;
       const btn = document.createElement("button");
       btn.className = `ghost-btn small${installed[item.id] ? " danger" : ""}`;
       btn.textContent = installed[item.id] ? "Désinstaller" : "Installer";

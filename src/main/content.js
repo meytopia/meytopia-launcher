@@ -153,26 +153,76 @@ function removeContent(relPath) {
 
 /* ── Catalogue approuvé (CDC F11) ─────────────────────────── */
 
-async function installOptional(item) {
-  // Intégrité obligatoire : pas d'installation sans SHA-1 vérifiable (40 hex).
-  if (!/^[0-9a-f]{40}$/i.test(String(item?.file?.sha1 || ''))) return false;
-  const dest = safeGamePath(item.file.path); // garde anti path-traversal (chemin venant d'optional.json)
-  const ok = await downloads.run(item.name, [{
-    name: path.basename(item.file.path),
-    url: item.file.url,
-    dest,
-    size: item.file.size || 0,
-    sha1: item.file.sha1,
-  }]);
-  if (!ok) return false;
-  const tracked = readTracked().filter((t) => t.path !== item.file.path);
-  tracked.push({ path: item.file.path, source: `optional:${item.id}`, addedAt: new Date().toISOString() });
-  writeTracked(tracked);
-  return true;
+/** Vrai si l'entrée du catalogue (id) est installée : suivie ET fichier présent sur le disque. */
+function isOptionalInstalled(id) {
+  return readTracked().some((t) => t.source === `optional:${id}` && fs.existsSync(path.join(getGameDir(), t.path)));
 }
 
-function uninstallOptional(item) {
+/**
+ * Installe un contenu du catalogue AVEC ses dépendances (bibliothèques présentes au catalogue).
+ * @param {object} item      entrée à installer
+ * @param {object[]} allItems catalogue complet (pour résoudre item.deps)
+ * @returns {Promise<boolean>}
+ */
+async function installOptional(item, allItems) {
+  allItems = Array.isArray(allItems) ? allItems : [item];
+  const byId = new Map(allItems.map((i) => [i.id, i]));
+  // Chaîne transitive : dépendances d'abord, puis le mod demandé.
+  const chain = [];
+  const seen = new Set();
+  const visit = (it) => {
+    if (!it || seen.has(it.id)) return;
+    seen.add(it.id);
+    for (const depId of (it.deps || [])) visit(byId.get(depId));
+    chain.push(it);
+  };
+  visit(item);
+  // Ne télécharge que ce qui a un SHA-1 valide et n'est pas déjà installé (hors item demandé).
+  const jobs = [];
+  for (const it of chain) {
+    if (!/^[0-9a-f]{40}$/i.test(String(it.file?.sha1 || ''))) {
+      if (it.id === item.id) return false; // le mod demandé DOIT être vérifiable
+      continue;                            // dépendance non vérifiable : ignorée
+    }
+    if (it.id !== item.id && isOptionalInstalled(it.id)) continue; // dépendance déjà présente
+    jobs.push({ name: path.basename(it.file.path), url: it.file.url, dest: safeGamePath(it.file.path),
+      size: it.file.size || 0, sha1: it.file.sha1, _id: it.id, _path: it.file.path });
+  }
+  if (!jobs.length) return true;
+  const ok = await downloads.run(item.name, jobs);
+  // Suivi : marque tout fichier réellement présent (même si la file s'est interrompue en cours de route).
+  let tracked = readTracked();
+  for (const j of jobs) {
+    if (!fs.existsSync(j.dest)) continue;
+    tracked = tracked.filter((t) => t.path !== j._path);
+    tracked.push({ path: j._path, source: `optional:${j._id}`, addedAt: new Date().toISOString() });
+  }
+  writeTracked(tracked);
+  return ok && fs.existsSync(safeGamePath(item.file.path));
+}
+
+/**
+ * Désinstalle un contenu du catalogue, dépendances comprises.
+ * - Bibliothèque : retire AUSSI les mods installés qui en dépendent.
+ * - Mod : retire ses bibliothèques devenues inutiles (plus aucun mod installé ne les utilise).
+ */
+function uninstallOptional(item, allItems) {
+  allItems = Array.isArray(allItems) ? allItems : [item];
+  const byId = new Map(allItems.map((i) => [i.id, i]));
+  if (item.lib) {
+    for (const m of allItems) {
+      if (m.id !== item.id && (m.deps || []).includes(item.id) && isOptionalInstalled(m.id)) removeContent(m.file.path);
+    }
+    removeContent(item.file.path);
+    return;
+  }
   removeContent(item.file.path);
+  for (const depId of (item.deps || [])) {
+    const dep = byId.get(depId);
+    if (!dep || !dep.lib) continue;
+    const stillUsed = allItems.some((m) => m.id !== item.id && (m.deps || []).includes(depId) && isOptionalInstalled(m.id));
+    if (!stillUsed && isOptionalInstalled(depId)) removeContent(dep.file.path);
+  }
 }
 
 module.exports = {

@@ -376,14 +376,16 @@ ipcMain.handle('optional:list', async () => {
 });
 ipcMain.handle('optional:install', async (_e, id) => {
   const { data } = await remote.getOptional();
-  const item = (data?.items ?? []).find((i) => i.id === id);
+  const items = data?.items ?? [];
+  const item = items.find((i) => i.id === id);
   if (!item) return false;
-  return content.installOptional(item);
+  return content.installOptional(item, items); // installe aussi les dépendances (bibliothèques)
 });
 ipcMain.handle('optional:uninstall', async (_e, id) => {
   const { data } = await remote.getOptional();
-  const item = (data?.items ?? []).find((i) => i.id === id);
-  if (item) content.uninstallOptional(item);
+  const items = data?.items ?? [];
+  const item = items.find((i) => i.id === id);
+  if (item) content.uninstallOptional(item, items); // gère la cascade lib ↔ mods
 });
 
 /* ── IPC : jeu, synchro, téléchargements ───────────────────── */
