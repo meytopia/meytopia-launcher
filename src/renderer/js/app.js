@@ -1667,12 +1667,15 @@ function deriveIntervalsDay(d) {
   return { slots, presence, perf: d.perf || null, up, ses: d.ses || {} };
 }
 
-// ⚠️ SYNCHRO : ce trio (mergeUp/deriveIntervalsDay/normalizeStatsData) existe aussi dans la RÉGIE
-// (meytopia-data/admin/index.html). Tout changement de format v5 doit être répercuté DANS LES DEUX.
+// ⚠️ SYNCHRO : ce trio (mergeUp/deriveIntervalsDay/normalizeStatsData) est la copie de la SOURCE CANONIQUE
+// meytopia-data/stats-core.js (testée en CI) ; il existe aussi dans la RÉGIE (meytopia-data/admin/index.html).
+// Tout changement de format v5 — dont le filtre ISO_DAY anti-injection — doit être répercuté DANS LES TROIS.
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/; // sécurité : clés de date malformées ignorées (les clés peuvent finir en innerHTML)
 function normalizeStatsData(data) {
   if (!data || !data.days) return data;
   const out = { ...data, days: {} };
   for (const [day, d] of Object.entries(data.days)) {
+    if (!ISO_DAY.test(day)) continue;
     // Detecter le format compact : d.s est un objet (pas un tableau)
     if (d && (Array.isArray(d.up) || (d.ses && typeof d.ses === "object"))) {
       out.days[day] = deriveIntervalsDay(d);
