@@ -1779,8 +1779,8 @@ function heroCategories() {
   };
   return [
     { emoji: "👑", title: "Le plus assidu de la saison", detail: (w) => `${fmtPlayTime(w.minutes)} de jeu au total`, pick: (a) => top(a, "minutes") },
-    { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const lateScore = (p) => p.latestSlot < 0 ? -1 : (p.latestSlot < 360 ? p.latestSlot + 1440 : p.latestSlot); const s = a.filter((p) => p.latestSlot >= 0).sort((x, y) => lateScore(y) - lateScore(x)); return s.length ? s[0] : null; } },
-    { emoji: "🌅", title: "Le lève-tôt", detail: (w) => `déjà là dès ${fmtSlotHM(w.earliestSlot)}`, pick: (a) => { const s = a.filter((p) => p.earliestSlot <= 1440).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } },
+    { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const lateScore = (p) => p.latestSlot < 0 ? -1 : (p.latestSlot < 360 ? p.latestSlot + 1440 : p.latestSlot); const s = a.filter((p) => p.latestSlot >= 1260 || (p.latestSlot >= 0 && p.latestSlot < 360)).sort((x, y) => lateScore(y) - lateScore(x)); return s.length ? s[0] : null; } }, // après 21h (ou jusqu'au petit matin) seulement
+    { emoji: "🌅", title: "Le lève-tôt", detail: (w) => `déjà là dès ${fmtSlotHM(w.earliestSlot)}`, pick: (a) => { const s = a.filter((p) => p.earliestSlot >= 0 && p.earliestSlot < 600).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } }, // avant 10h seulement (sinon ce n'est pas un lève-tôt)
     { emoji: "🏃", title: "Le marathonien", detail: (w) => `plus longue session : ${fmtPlayTime(w.longestSession)}`, pick: (a) => top(a, "longestSession", 2) },
     { emoji: "📅", title: "Le fidèle", detail: (w) => `présent ${w.days} jour(s)`, pick: (a) => top(a, "days") },
     { emoji: "🌙", title: "Le noctambule", detail: (w) => `${fmtPlayTime(w.nightMin)} entre minuit et 6h`, pick: (a) => top(a, "nightMin", 2) },
