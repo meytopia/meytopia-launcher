@@ -121,6 +121,17 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Verrou de navigation : la fenêtre ne quitte JAMAIS l'app locale (file://). Une tentative
+  // de navigation vers une URL distante (qui hériterait du pont IPC) est bloquée ; un lien https
+  // est renvoyé au navigateur. Garde-fou Electron standard, complémentaire de la CSP.
+  const blockNavigation = (event, url) => {
+    if (url.startsWith('file://')) return; // navigation interne autorisée
+    event.preventDefault();
+    if (url.startsWith('https://')) shell.openExternal(url);
+  };
+  mainWindow.webContents.on('will-navigate', blockNavigation);
+  mainWindow.webContents.on('will-redirect', blockNavigation);
+
   // Etat de la fenetre (agrandie / plein ecran) pour l'interface (B1, B2)
   const sendWindowState = () => emitToRenderer('window:state', {
     maximized: mainWindow?.isMaximized() ?? false,
@@ -183,10 +194,25 @@ ipcMain.handle('shell:openExternal', (_e, url) => {
 });
 
 /* ── IPC : réglages (CDC §6.7) ─────────────────────────────── */
+// Liste blanche : seules ces clés « interface » peuvent être écrites depuis le renderer.
+// dataDir / windowState / activeAccount restent réservés aux flux internes de confiance
+// (migration, mémoire de fenêtre) — un renderer compromis ne peut pas rediriger l'emplacement
+// d'exécution des .jar ni la position de la fenêtre via settings:set.
+const ALLOWED_SETTING_KEYS = new Set([
+  'theme', 'ramGb', 'autoJoin', 'minimizeOnPlay', 'minimizeToTray', 'notifyServerBack',
+  'betaChannel', 'betaUnlocked', 'friends', 'friendsMuted', 'friendsNotify',
+  'dismissedEventKey', 'dismissedUpdateVersion', 'onboarded', 'lastVersion',
+]);
 ipcMain.handle('settings:get', () => settings.read());
 ipcMain.handle('settings:set', (_e, patch) => {
-  if (patch && typeof patch === 'object') return settings.write(patch);
-  return settings.read();
+  if (!patch || typeof patch !== 'object') return settings.read();
+  const clean = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (!ALLOWED_SETTING_KEYS.has(k)) continue;
+    if (k === 'ramGb') { const n = Number(v); if (Number.isFinite(n)) clean[k] = Math.max(2, Math.min(64, Math.round(n))); continue; }
+    clean[k] = v;
+  }
+  return settings.write(clean);
 });
 
 /* ── IPC : comptes Microsoft (CDC F2) ──────────────────────── */
@@ -207,13 +233,39 @@ ipcMain.handle('accounts:select', (_e, uuid) => {
   broadcastAccounts();
 });
 
+/* ── Cache mémoire court des JSON de pilotage (perf) ─────────
+ * Le renderer interroge server:status ~1×/s tant que l'Accueil est ouvert.
+ * Sans cache, chaque tick re-télécharge launcher.json (réseau) ET le réécrit
+ * sur disque (remote.fetchJson) — ~3600 fois/heure pour un hôte qui ne change
+ * jamais en session. On mémorise la config quelques secondes : toujours quasi
+ * à jour, mais on épargne au PC réseau + écritures disque inutiles. */
+const CONFIG_CACHE_MS = 30000;
+let _cfgCache = { at: 0, data: null };
+let _manifestCache = { at: 0, url: '', data: null };
+async function cachedLauncherConfig() {
+  if (_cfgCache.data && Date.now() - _cfgCache.at < CONFIG_CACHE_MS) return { data: _cfgCache.data };
+  const r = await remote.getLauncherConfig();
+  if (r && r.data) _cfgCache = { at: Date.now(), data: r.data };
+  return r;
+}
+async function cachedManifest(url) {
+  if (!url) return { data: null };
+  if (_manifestCache.data && _manifestCache.url === url && Date.now() - _manifestCache.at < CONFIG_CACHE_MS) {
+    return { data: _manifestCache.data };
+  }
+  const r = await remote.getManifest(url);
+  if (r && r.data) _manifestCache = { at: Date.now(), url, data: r.data };
+  return r;
+}
+
 /* ── IPC : config distante et statut serveur (CDC F8, F14) ─── */
 ipcMain.handle('remote:config', async () => {
   const { data } = await remote.getLauncherConfig();
+  _cfgCache = { at: Date.now(), data: data ?? _cfgCache.data }; // rafraîchit le cache partagé
   return { config: data, offline: remote.isOffline() };
 });
 ipcMain.handle('server:status', async () => {
-  const { data: config } = await remote.getLauncherConfig();
+  const { data: config } = await cachedLauncherConfig();
   if (!config?.server) return { online: false };
   return getServerStatus(config.server);
 });
@@ -289,11 +341,14 @@ ipcMain.handle('content:import', (_e, items) => {
 });
 
 ipcMain.handle('content:remove', (_e, relPath) => {
-  if (typeof relPath === 'string' && !relPath.includes('..')) content.removeContent(relPath);
+  if (typeof relPath !== 'string') return;
+  // La vraie garde anti path-traversal (chemin absolu ou « .. ») est dans content.removeContent (safeGamePath).
+  try { content.removeContent(relPath); } catch { /* chemin refusé : ignoré */ }
 });
 
 ipcMain.handle('content:openFolder', (_e, dirName) => {
-  const openable = [...sync.MANAGED_DIRS, 'screenshots']; // dossiers ouvrables (I5)
+  // + logs et crash-reports : permet au joueur de récupérer latest.log pour le support (I5).
+  const openable = [...sync.MANAGED_DIRS, 'screenshots', 'logs', 'crash-reports'];
   if (!openable.includes(dirName)) return;
   const dir = path.join(getGameDir(), dirName);
   fs.mkdirSync(dir, { recursive: true });
@@ -302,7 +357,8 @@ ipcMain.handle('content:openFolder', (_e, dirName) => {
 
 ipcMain.handle('blocklist:delete', (_e, paths) => {
   if (!Array.isArray(paths)) return;
-  content.deleteFiles(paths.filter((p) => typeof p === 'string' && !p.includes('..')));
+  // content.deleteFiles applique safeGamePath à chaque chemin (garde réelle contre les chemins absolus).
+  content.deleteFiles(paths.filter((p) => typeof p === 'string'));
 });
 
 /* ── IPC : catalogue optionnel (CDC F11) ───────────────────── */
@@ -430,8 +486,8 @@ ipcMain.handle('app:debugInfo', async () => {
 // Infos du modpack pour l'en-tête de Contenus (J5)
 ipcMain.handle('pack:info', async () => {
   try {
-    const { data: config } = await remote.getLauncherConfig();
-    const { data: manifest } = await remote.getManifest(config?.modpack?.manifestUrl);
+    const { data: config } = await cachedLauncherConfig();
+    const { data: manifest } = await cachedManifest(config?.modpack?.manifestUrl);
     const files = manifest?.files ?? [];
     if (!files.length) return null;
     return {
@@ -524,8 +580,11 @@ setInterval(async () => {
   try {
     const prefs = settings.read();
     const friends = Array.isArray(prefs.friends) ? prefs.friends : [];
-    if (!prefs.notifyServerBack && !friends.length) { serverState = "unknown"; offlineStreak = 0; lastPlayers = null; return; }
-    const { data: config } = await remote.getLauncherConfig();
+    const friendsNotify = prefs.friendsNotify !== false; // interrupteur global des notifs d'amis (défaut : activé)
+    const muted = new Set((Array.isArray(prefs.friendsMuted) ? prefs.friendsMuted : []).map((n) => String(n).toLowerCase()));
+    const watchFriends = friendsNotify && friends.length > 0;
+    if (!prefs.notifyServerBack && !watchFriends) { serverState = "unknown"; offlineStreak = 0; lastPlayers = null; return; }
+    const { data: config } = await cachedLauncherConfig();
     if (!config?.server) return;
     const status = await getServerStatus(config.server);
     const online = Boolean(status.online);
@@ -553,13 +612,13 @@ setInterval(async () => {
 
     // ── Notif « un ami se connecte » (uniquement quand le serveur repond avec une liste) ──
     const players = online && Array.isArray(status.players) ? status.players : null;
-    if (players && friends.length && lastPlayers && !graceDemarrage && Notification.isSupported()) {
+    if (players && watchFriends && lastPlayers && !graceDemarrage && Notification.isSupported()) {
       const own = new Set(accounts.summary().map((a) => String(a.name).toLowerCase()));
       const before = new Set(lastPlayers.map((nick) => nick.toLowerCase()));
       const watched = new Set(friends.map((f) => String(f).toLowerCase()));
       const arrivals = players.filter((nick) => {
         const low = nick.toLowerCase();
-        return watched.has(low) && !before.has(low) && !own.has(low);
+        return watched.has(low) && !before.has(low) && !own.has(low) && !muted.has(low); // respecte la cloche coupée par ami
       });
       if (arrivals.length) {
         const body = arrivals.length === 1

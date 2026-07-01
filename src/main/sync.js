@@ -89,6 +89,12 @@ async function diff(manifest) {
     try { abs = safeGamePath(file.path); }
     catch (e) { console.warn('[sync] entrée manifest ignorée (chemin refusé) :', file.path); continue; }
     manifestPaths.add(file.path);
+    // Intégrité obligatoire : sans SHA-1 vérifiable (40 hex), on n'installe pas ce fichier.
+    // Il reste "connu" (déjà dans manifestPaths → pas signalé hors-modpack) mais n'est pas téléchargé.
+    if (!/^[0-9a-f]{40}$/i.test(String(file.sha1 || ''))) {
+      console.warn('[sync] fichier ignoré (SHA-1 manquant/invalide dans le manifest) :', file.path);
+      continue;
+    }
     let needs = true;
     if (fs.existsSync(abs)) {
       try {

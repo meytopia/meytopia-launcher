@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none';" />
   <title>Meytopia Launcher</title>
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="stylesheet" href="css/app.css" />
@@ -435,8 +435,9 @@
                 <p>Souvent un fichier abîmé. Lance une vérification : elle re-télécharge ce qui manque.</p>
                 <button class="ghost-btn small" data-help="fullcheck">Vérification complète</button></details>
               <details><summary>Le jeu plante juste après le lancement</summary>
-                <p>Un mod ajouté à la main peut être en cause. Ouvre le dossier mods, retire l'ajout récent, puis relance.</p>
-                <button class="ghost-btn small" data-help="open-mods">Ouvrir le dossier mods</button></details>
+                <p>Un mod ajouté à la main peut être en cause. Ouvre le dossier mods, retire l'ajout récent, puis relance. Pour un diagnostic, ouvre le dossier des logs et partage <code>latest.log</code> (ou le dernier fichier de <code>crash-reports</code>).</p>
+                <button class="ghost-btn small" data-help="open-mods">Ouvrir le dossier mods</button>
+                <button class="ghost-btn small" data-help="open-logs">Ouvrir les logs</button></details>
               <details><summary>Je n'ai pas la dernière version / mise à jour bloquée</summary>
                 <p>Relance la recherche de mise à jour. Si une maj est prête, le bouton « Redémarrer » apparaît.</p>
                 <button class="ghost-btn small" data-help="check-update">Rechercher les mises à jour</button></details>

@@ -122,7 +122,8 @@ async function scanBlocklist(blocklist, managedDirs) {
 /** Supprime les fichiers bloqués, à la demande de l'utilisateur (CDC F6). */
 function deleteFiles(relPaths) {
   for (const rel of relPaths) {
-    fs.rmSync(path.join(getGameDir(), rel), { force: true });
+    // safeGamePath : même garde anti path-traversal que removeContent (refuse « .. » et chemins absolus).
+    try { fs.rmSync(safeGamePath(rel), { force: true }); } catch { /* chemin refusé : ignoré */ }
   }
   registerDetected([]); // purge du suivi
 }
@@ -153,6 +154,8 @@ function removeContent(relPath) {
 /* ── Catalogue approuvé (CDC F11) ─────────────────────────── */
 
 async function installOptional(item) {
+  // Intégrité obligatoire : pas d'installation sans SHA-1 vérifiable (40 hex).
+  if (!/^[0-9a-f]{40}$/i.test(String(item?.file?.sha1 || ''))) return false;
   const dest = safeGamePath(item.file.path); // garde anti path-traversal (chemin venant d'optional.json)
   const ok = await downloads.run(item.name, [{
     name: path.basename(item.file.path),

@@ -10,6 +10,20 @@ const { pipeline } = require('stream/promises');
 const { Readable } = require('stream');
 const { PARALLEL_DOWNLOADS, DOWNLOAD_RETRIES } = require('./config');
 
+const SHA1_RE = /^[0-9a-f]{40}$/i;
+/** N'autorise que le HTTPS vers GitHub (raw + assets de release) ou le CDN Modrinth
+ *  (catalogue optionnel résolu en régie). Bloque un http:// (MITM) ou un pivot vers un
+ *  hôte arbitraire si un JSON de pilotage est corrompu. */
+function isAllowedDownloadUrl(u) {
+  try {
+    const url = new URL(String(u));
+    if (url.protocol !== 'https:') return false;
+    const h = url.hostname.toLowerCase();
+    return h === 'github.com' || h === 'githubusercontent.com' || h.endsWith('.githubusercontent.com')
+        || h === 'modrinth.com' || h.endsWith('.modrinth.com');
+  } catch { return false; }
+}
+
 let emitToRenderer = () => {};
 /** Branche l'émission d'événements vers l'interface (appelé par main.js). */
 function bindEmitter(fn) { emitToRenderer = fn; }
@@ -80,6 +94,10 @@ async function waitIfPaused() {
 }
 
 async function downloadOne(job) {
+  // Intégrité + provenance obligatoires AVANT tout téléchargement (CDC §7) :
+  // aucun fichier n'est écrit sans SHA-1 vérifiable ni depuis une URL non-GitHub.
+  if (!SHA1_RE.test(String(job.sha1 || ''))) throw new Error(`SHA-1 manquant ou invalide : ${job.name}`);
+  if (!isAllowedDownloadUrl(job.url)) throw new Error(`URL de téléchargement non autorisée : ${job.name}`);
   job.state = 'en cours';
   notify();
   const partPath = `${job.dest}.part`;
@@ -101,11 +119,9 @@ async function downloadOne(job) {
     });
     await pipeline(Readable.fromWeb(res.body), counter, out);
 
-    // Intégrité : SHA-1 vérifié après chaque téléchargement (CDC §7)
-    if (job.sha1) {
-      const hash = await sha1File(partPath);
-      if (hash.toLowerCase() !== job.sha1.toLowerCase()) throw new Error('SHA-1 invalide');
-    }
+    // Intégrité : SHA-1 systématiquement vérifié après chaque téléchargement (CDC §7)
+    const hash = await sha1File(partPath);
+    if (hash.toLowerCase() !== job.sha1.toLowerCase()) throw new Error('SHA-1 invalide');
     fs.renameSync(partPath, job.dest); // écriture atomique
     job.state = 'terminé';
     notify();

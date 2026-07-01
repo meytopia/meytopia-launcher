@@ -25,7 +25,8 @@ let emitToRenderer = () => {};
 function bindEmitter(fn) { emitToRenderer = fn; }
 
 let running = false;
-const isRunning = () => running;
+let preparing = false; // vrai pendant toute la préparation async (config → synchro → blocklist)
+const isRunning = () => running || preparing;
 
 const setState = (state, text = '') => emitToRenderer('game:state', { state, text });
 
@@ -34,7 +35,11 @@ const setState = (state, text = '') => emitToRenderer('game:state', { state, tex
  * la progression passe par les événements game:state et downloads:update.
  */
 async function play() {
-  if (running) return { ok: false, reason: 'already-running' };
+  // Verrou posé DÈS l'entrée (avant tout await) : un double-clic sur JOUER ne peut plus
+  // déclencher deux préparations/synchros concurrentes sur les mêmes fichiers (corruption).
+  if (running || preparing) return { ok: false, reason: 'already-running' };
+  preparing = true;
+  try {
 
   // 1) Compte actif obligatoire (CDC F2)
   const profile = accounts.getActiveProfile();
@@ -174,6 +179,11 @@ async function play() {
   }
 
   return { ok: true };
+  } finally {
+    // La main est passée à `running` (jeu en cours de lancement) ou on est sorti en erreur :
+    // dans les deux cas la phase de préparation est terminée.
+    preparing = false;
+  }
 }
 
 module.exports = { bindEmitter, play, isRunning };

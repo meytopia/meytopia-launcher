@@ -179,12 +179,17 @@ function refreshPlayButton() {
     set("…", ui.game.text || "Préparation…", false);
   } else if (ui.game.state === "ingame") {
     set("En jeu", "Bon jeu !", false);
+  } else if (ui.launchError) {
+    // #9 : trace persistante d'un échec (un toast s'efface et laisse « Prêt », le joueur ne comprend pas).
+    set("Réessayer", "⚠ " + ui.launchError, true);
+    btn.dataset.action = "play";
   } else {
     set("Jouer", ui.offlinePlay ? "Hors ligne — fichiers non vérifiés" : "Prêt", true);
     btn.dataset.action = "play";
   }
 }
 
+let playPending = false; // #4 : garde synchrone contre le double-clic pendant la préparation
 async function onPlayClick() {
   const action = $("#btn-play").dataset.action;
   if (action === "update-install") return api.updater.install();
@@ -194,8 +199,21 @@ async function onPlayClick() {
     return;
   }
   if (action !== "play") return;
+  if (playPending) return; // un lancement est déjà en préparation
+  playPending = true;
+  ui.launchError = null; // nouvel essai → on efface l'erreur précédente (#9)
+  // Retour visuel immédiat + bouton neutralisé AVANT le premier await (les événements
+  // game:state « checking/syncing » prendront le relais dans la foulée).
+  $("#btn-play").classList.add("disabled");
+  $("#play-label").textContent = "…";
+  $("#play-state").textContent = "Préparation…";
 
-  const result = await api.game.play();
+  let result;
+  try {
+    result = await api.game.play();
+  } finally {
+    playPending = false;
+  }
   if (!result || result.ok) return;
   const reasons = {
     "no-account": "Aucun compte actif — direction Paramètres.",
@@ -215,6 +233,10 @@ $("#btn-play").addEventListener("click", onPlayClick);
 
 api.game.onState((payload) => {
   ui.game = payload;
+  // #9 : on retient l'erreur jusqu'au prochain essai (trace persistante) ; on l'efface dès qu'une
+  // nouvelle tentative démarre ou que le jeu se lance/ferme normalement.
+  if (payload.state === "error") ui.launchError = payload.text || "Le lancement a échoué.";
+  else if (["checking", "syncing", "launching", "ingame", "closed"].includes(payload.state)) ui.launchError = null;
   if (payload.state === "error" && payload.text) toast(`Erreur : ${payload.text}`, 6000);
   if (payload.state === "closed") toast("Minecraft est fermé.");
   refreshPlayButton();
@@ -362,8 +384,12 @@ async function refreshStatus() {
 // fenêtre visible. Intervalle : 1 s par défaut, réglable à distance via
 // launcher.json → server.statusIntervalS (CDC F8 amendé).
 function statusIntervalMs() {
+  // Défaut 3 s (au lieu de 1 s) : pour une petite communauté, actualiser le nombre de joueurs
+  // chaque seconde n'apporte rien de perceptible mais génère un ping TCP + query UDP permanents.
+  // La régie peut surcharger via launcher.json → server.statusIntervalS. La boucle ne tourne de
+  // toute façon que sur l'Accueil/Amis et fenêtre visible (rien quand minimisé/en jeu).
   const s = Number(ui.remoteConfig?.server?.statusIntervalS);
-  return (Number.isFinite(s) && s >= 1 ? s : 1) * 1000;
+  return (Number.isFinite(s) && s >= 1 ? s : 3) * 1000;
 }
 function updateStatusLabel() {
   const sec = statusIntervalMs() / 1000;
@@ -596,6 +622,7 @@ if ($("#help-list")) $("#help-list").addEventListener("click", (e) => {
   if (!a) return;
   if (a === "fullcheck") $("#btn-fullcheck") && $("#btn-fullcheck").click();
   else if (a === "open-mods") api.content.openFolder("mods");
+  else if (a === "open-logs") api.content.openFolder("logs");
   else if (a === "check-update") $("#btn-check-update") && $("#btn-check-update").click();
   else if (a === "debug") $("#btn-debug-info") && $("#btn-debug-info").click();
 });
@@ -1355,6 +1382,18 @@ $("#whatsnew-close").addEventListener("click", () => { $("#whatsnew-modal").hidd
 /* ── Initialisation ────────────────────────────────────────── */
 /* ── Mes stats ─────────────────────────────────────────────── */
 const STATS_STALE_MS = 5 * 60 * 1000; // au-delà, on recharge les stats lourdes au (ré)affichage de l'onglet
+// #10 : un seul relevé partagé entre « Mes stats » et « Communauté » (même gros stats-serveur.json).
+// Visiter les deux onglets ne fait plus qu'un seul aller-retour réseau et un seul parse/normalize.
+let _statsCache = null; // { at, res }
+async function cachedPlayerStats(force) {
+  if (!force && _statsCache && _statsCache.res && Date.now() - _statsCache.at < STATS_STALE_MS) return _statsCache.res;
+  let res;
+  try { res = await api.app.playerStats(); } catch { res = null; }
+  if (res && res.data) { try { res.data = normalizeStatsData(res.data); } catch {} } // normalisé une seule fois
+  // On ne met en cache qu'un relevé exploitable : un échec réseau ou un relevé vide peut se re-tenter aussitôt.
+  _statsCache = { at: (res && res.data) ? Date.now() : 0, res };
+  return res;
+}
 let myStatsFetchedAt = 0;
 let currentMe = null; // pseudo du compte actif (pour le partage de profil)
 const PUBLIC_PROFILE_BASE = "https://meytopia.github.io/meytopia-data/?p=";
@@ -1376,14 +1415,12 @@ async function loadMyStats(force) {
   $("#mystats-loading").hidden = false;
   $("#mystats-content").hidden = true;
   $("#mystats-empty").hidden = true;
-  let res;
-  try { res = await api.app.playerStats(); } catch { res = null; }
+  const res = await cachedPlayerStats(force); // relevé partagé, normalisé une seule fois (#10)
   $("#mystats-loading").hidden = true;
   myStatsFetchedAt = Date.now();
   { const cb = $("#mystats-compare"); if (cb) cb.innerHTML = ""; }
   { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = ""; }
   { const so = $("#mystats-social"); if (so) so.innerHTML = ""; }
-  if (res && res.data) res.data = normalizeStatsData(res.data);
 
   const seen = res && res.data && res.data.seen ? res.data.seen : null;
   if (!seen) {
@@ -2196,12 +2233,11 @@ async function loadCommunity(force) {
   $("#community-loading").hidden = false;
   $("#community-content").hidden = true;
   $("#community-empty").hidden = true;
-  let res;
-  try { res = await api.app.playerStats(); } catch { res = null; }
+  const res = await cachedPlayerStats(force); // relevé partagé, normalisé une seule fois (#10)
   $("#community-loading").hidden = true;
   communityFetchedAt = Date.now();
 
-  const data = res && res.data ? normalizeStatsData(res.data) : null;
+  const data = res && res.data ? res.data : null;
   const live = res && res.live ? res.live : null;
   const liveHasPlayers = live && live.online && Array.isArray(live.players) && live.players.length > 0;
   const hasSeen = data && data.seen && Object.keys(data.seen).length > 0;
