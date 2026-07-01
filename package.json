@@ -1,7 +1,7 @@
 {
   "name": "meytopia-launcher",
   "productName": "Meytopia Launcher",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Launcher officiel du serveur Minecraft communautaire Meytopia",
   "main": "src/main/main.js",
   "scripts": {
@@ -12,14 +12,14 @@
   "author": "Meytopia",
   "license": "MIT",
   "devDependencies": {
-    "adm-zip": "^0.5.17",
     "electron": "^42.0.0",
     "electron-builder": "^26.0.0"
   },
   "dependencies": {
     "electron-updater": "^6.3.0",
     "minecraft-java-core": "^4.2.8",
-    "prismarine-nbt": "^2.8.0"
+    "prismarine-nbt": "^2.8.0",
+    "adm-zip": "^0.5.17"
   },
   "build": {
     "appId": "fr.meytopia.launcher",

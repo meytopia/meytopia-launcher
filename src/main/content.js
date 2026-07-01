@@ -55,6 +55,22 @@ const sha1File = (file) => new Promise((resolve, reject) => {
  * Scanne les dossiers gérés contre la blocklist.
  * @returns {Promise<{path:string, name:string, reason:string}[]>}
  */
+/** Identité interne d'un .jar (modId + displayName, minuscules) — pour bloquer même si le fichier est renommé. */
+function jarIdentity(fullPath) {
+  try {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(fullPath);
+    const e = zip.getEntry('META-INF/neoforge.mods.toml') || zip.getEntry('META-INF/mods.toml');
+    if (!e) return '';
+    const t = e.getData().toString('utf8');
+    const id = (t.match(/modId\s*=\s*"([^"]+)"/) || [])[1] || '';
+    const name = (t.match(/displayName\s*=\s*"([^"]+)"/) || [])[1] || '';
+    return (id + ' ' + name).toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
 async function scanBlocklist(blocklist, managedDirs) {
   const entries = blocklist?.entries ?? [];
   if (!entries.length) return [];
@@ -68,13 +84,25 @@ async function scanBlocklist(blocklist, managedDirs) {
         const full = path.join(d, entry.name);
         if (entry.isDirectory()) { await walk(full); continue; }
         const lower = entry.name.toLowerCase();
+        const isJar = lower.endsWith('.jar');
+        let jarId = null; // identité interne du .jar (modId + displayName), lue à la demande (anti-renommage)
         for (const rule of entries) {
           const scopes = rule.scope ?? managedDirs;
           if (!scopes.includes(dir)) continue;
           let hit = false;
-          if (rule.match?.fileName) hit = lower === String(rule.match.fileName).toLowerCase();
-          else if (rule.match?.contains) hit = lower.includes(String(rule.match.contains).toLowerCase());
-          else if (rule.match?.sha1) hit = (await sha1File(full)).toLowerCase() === String(rule.match.sha1).toLowerCase();
+          if (rule.match?.fileName) {
+            hit = lower === String(rule.match.fileName).toLowerCase();
+          } else if (rule.match?.contains) {
+            const kw = String(rule.match.contains).toLowerCase();
+            hit = lower.includes(kw);
+            if (!hit && isJar) {
+              // Le fichier a pu être renommé : on regarde AUSSI l'identifiant interne du mod (modId/displayName).
+              if (jarId === null) jarId = jarIdentity(full);
+              hit = jarId.includes(kw);
+            }
+          } else if (rule.match?.sha1) {
+            hit = (await sha1File(full)).toLowerCase() === String(rule.match.sha1).toLowerCase();
+          }
           if (hit) {
             matches.push({
               path: path.relative(getGameDir(), full).split(path.sep).join('/'),
