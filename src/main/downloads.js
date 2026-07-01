@@ -25,6 +25,7 @@ const state = {
   totalBytes: 0,
   lastTick: { time: 0, bytes: 0, speed: 0 },
   controllers: new Set(),
+  clearTimer: null,   // remise à zéro auto du volet après une file terminée
 };
 
 let waiters = []; // résolution de pause()
@@ -121,6 +122,7 @@ async function downloadOne(job) {
  * @param {Array<{name,url,dest,size,sha1?}>} jobs
  */
 async function run(label, jobs) {
+  clearTimeout(state.clearTimer); // une nouvelle file annule la remise à zéro programmée
   state.label = label;
   state.files = jobs.map((j) => ({ ...j, done: 0, state: 'en attente', tries: 0 }));
   state.paused = false;
@@ -163,6 +165,21 @@ async function run(label, jobs) {
   // Recalcule les octets terminés réels (les jobs en erreur sont à 0)
   state.doneBytes = state.files.reduce((sum, f) => sum + (f.state === 'terminé' ? f.size || f.done : 0), 0);
   notify(true);
+  // Succès : on efface le volet peu après (après sa fermeture auto côté UI) — plus de liste
+  // « terminé » ni de « 0.00 Mo/s » qui traînent à la réouverture. Une file en erreur reste (reprise).
+  if (!failed && !state.interrupted) {
+    clearTimeout(state.clearTimer);
+    state.clearTimer = setTimeout(() => {
+      if (!state.running && !state.interrupted) {
+        state.label = '';
+        state.files = [];
+        state.doneBytes = 0;
+        state.totalBytes = 0;
+        state.lastTick = { time: 0, bytes: 0, speed: 0 };
+        notify(true);
+      }
+    }, 5000);
+  }
   return !failed && !state.interrupted;
 }
 
