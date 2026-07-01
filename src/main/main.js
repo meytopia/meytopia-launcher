@@ -442,10 +442,32 @@ ipcMain.handle('pack:info', async () => {
   } catch { return null; }
 });
 
+// Cache ETag (Node/Electron n'a pas de cache HTTP) : on garde l'ETag et le dernier corps
+// telecharge. A la requete suivante on envoie If-None-Match ; si le fichier n'a pas change,
+// le serveur repond 304 (corps vide) et on reutilise le corps en cache — plus de
+// re-telechargement du gros stats-serveur.json a chaque ouverture. Si le reseau hoquette,
+// on renvoie le dernier bon releve plutot que du vide.
+const jsonEtagCache = new Map(); // url -> { etag, body }
+async function fetchJsonCached(url, signal) {
+  const prev = jsonEtagCache.get(url);
+  try {
+    const headers = prev && prev.etag ? { 'If-None-Match': prev.etag } : undefined;
+    const res = await fetch(url, { signal, headers });
+    if (res.status === 304 && prev) return prev.body;      // inchange : corps reutilise
+    if (!res.ok) return prev ? prev.body : null;
+    let body;
+    try { body = await res.json(); } catch { return prev ? prev.body : null; }
+    const etag = res.headers.get('etag');
+    if (etag) jsonEtagCache.set(url, { etag, body });
+    return body;
+  } catch { return prev ? prev.body : null; } // coupure/timeout : dernier bon releve
+}
+
 // Stats du joueur : telecharge le releve de la sonde (branche stats, lecture seule).
 // Renvoie { me, data, live } ou me = pseudo Minecraft du compte actif, data = historique
-// (stats-serveur.json) et live = etat temps reel (live.json). Les deux fichiers sont
-// recuperes en parallele ; live peut etre null si la sonde ne le publie pas encore.
+// (stats-serveur.json) et live = etat temps reel (live.json). Les trois fichiers sont
+// recuperes en parallele avec cache conditionnel ; live peut etre null si la sonde ne
+// le publie pas encore.
 ipcMain.handle('stats:get', async () => {
   try {
     const { STATS_URL, LIVE_URL, CHALLENGES_URL, FETCH_TIMEOUT_MS } = require('./config');
@@ -454,24 +476,12 @@ ipcMain.handle('stats:get', async () => {
     const meUuid = active ? active.uuid : null;
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
-    const [statsR, liveR, chR] = await Promise.allSettled([
-      fetch(STATS_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
-      fetch(LIVE_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
-      fetch(CHALLENGES_URL + '?nc=' + Date.now(), { signal: ctrl.signal }),
+    const [data, live, challenges] = await Promise.all([
+      fetchJsonCached(STATS_URL, ctrl.signal),
+      fetchJsonCached(LIVE_URL, ctrl.signal),
+      fetchJsonCached(CHALLENGES_URL, ctrl.signal),
     ]);
     clearTimeout(to);
-    let data = null;
-    let live = null;
-    let challenges = null;
-    if (statsR.status === 'fulfilled' && statsR.value.ok) {
-      try { data = await statsR.value.json(); } catch { data = null; }
-    }
-    if (liveR.status === 'fulfilled' && liveR.value.ok) {
-      try { live = await liveR.value.json(); } catch { live = null; }
-    }
-    if (chR.status === 'fulfilled' && chR.value.ok) {
-      try { challenges = await chR.value.json(); } catch { challenges = null; }
-    }
     return { me, meUuid, data, live, challenges };
   } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null }; }
 });
@@ -483,10 +493,9 @@ ipcMain.handle('live:get', async () => {
     const { LIVE_URL, FETCH_TIMEOUT_MS } = require('./config');
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
-    const res = await fetch(LIVE_URL + '?nc=' + Date.now(), { signal: ctrl.signal });
+    const live = await fetchJsonCached(LIVE_URL, ctrl.signal);
     clearTimeout(to);
-    if (!res.ok) return null;
-    return await res.json();
+    return live;
   } catch { return null; }
 });
 
