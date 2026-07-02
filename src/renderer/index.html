@@ -461,6 +461,21 @@
                 <button class="ghost-btn small" data-help="debug">Copier les infos de débogage</button></details>
             </div>
           </div>
+          <div class="setting-row" style="display:block">
+            <span class="setting-name">🔐 Tes données — ce que le serveur enregistre sur toi</span>
+            <div class="help-list">
+              <details><summary>Ce qui est enregistré quand tu joues</summary>
+                <p>Ton pseudo Minecraft, l'identifiant de ton compte (UUID, fourni par Minecraft), ton temps de jeu et tes horaires de connexion, et tes statistiques de jeu (monstres tués, distance parcourue, diamants minés, morts, succès…). Rien d'autre : pas d'adresse IP, pas de messages du chat, pas d'e-mail.</p></details>
+              <details><summary>Où c'est visible</summary>
+                <p>Sur la page Communauté du launcher, sur la page publique des stats (annuaire, profils, classements) et dans le « en ligne en ce moment ». Les fichiers de données sont hébergés sur GitHub, dans un dépôt public : n'importe qui sur Internet peut donc les consulter.</p></details>
+              <details><summary>Combien de temps c'est gardé</summary>
+                <p>Le temps d'une saison : à chaque nouvelle saison, tous les compteurs repartent de zéro. La saison terminée peut être conservée en archive complète (c'est ce qui alimente « L'histoire des saisons »). En plus, une sauvegarde quotidienne des stats publiques est gardée sur GitHub (anti-perte) : les sauvegardes des jours passés ne sont pas réécrites — elles se retirent sur demande (voir plus bas).</p></details>
+              <details><summary>Cacher mes stats — le mode privé</summary>
+                <p>Tape <code>/meyprivacy cacher</code> en jeu : tes stats disparaissent immédiatement des pages publiques, du launcher et du temps réel — tu n'es ni listé, ni compté. ⚠️ À savoir : en privé, tu ne reçois pas les récompenses des défis communautaires (elles sont réservées aux joueurs visibles — le jeu te prévient si tu en rates une). Tape <code>/meyprivacy montrer</code> pour redevenir visible : la récompense manquée arrive à ta connexion suivante.</p></details>
+              <details><summary>Être retiré des archives et des sauvegardes</summary>
+                <p>Le mode privé agit sur le présent — mais tout ce qui a été publié avant peut encore mentionner ton pseudo : les archives des saisons passées ET les sauvegardes quotidiennes déjà écrites (y compris celles de la saison en cours, d'avant ton passage en privé). Pour en être retiré, demande à l'administrateur : il dispose d'un outil qui t'efface de toutes les archives et sauvegardes, sans casser les stats des autres joueurs.</p></details>
+            </div>
+          </div>
           <div class="setting-row">
             <div class="setting-meta">
               <span class="setting-name">Canal bêta</span>

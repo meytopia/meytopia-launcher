@@ -1404,6 +1404,9 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-challenge.done .comm-challenge-fill { background: var(--success); }
 .comm-challenge-reward { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
 .comm-challenge-mine { color: var(--accent-hover); font-size: 12px; margin-top: 6px; font-weight: 600; }
+/* Note vie privée sous le titre des défis : règle « récompenses réservées aux joueurs visibles » */
+.comm-challenge-note { color: var(--text-dim); font-size: 12px; margin: -6px 0 10px; line-height: 1.5; }
+.comm-challenge-note.warn { color: var(--warning, #fbbf24); }
 /* Étiquette de période des titres de bloc (« depuis le début de Meytopia ») */
 .comm-period { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
 /* Prochain jalon collectif : teaser de progression (réutilise la barre des défis) */

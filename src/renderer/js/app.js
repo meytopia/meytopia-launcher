@@ -1503,7 +1503,7 @@ async function loadMyStats(force) {
     $("#mystats-first").textContent = "—";
     $("#mystats-badges").innerHTML = "";
     { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = iAmPrivate
-      ? '🔒 Tes stats sont <b>privées</b> et ne sont pas publiées. Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
+      ? '🔒 Tes stats sont <b>privées</b> et ne sont pas publiées (tu ne reçois pas non plus les récompenses des défis communautaires). Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
       : ''; }
     renderMyLeaderboard(ranked, me);
     return;
@@ -1572,8 +1572,8 @@ async function loadMyStats(force) {
 
   const myPriv = !!(res.data.priv && meEntry.uuid && res.data.priv[meEntry.uuid] === true);
   { const pe = $("#mystats-privacy"); if (pe) pe.innerHTML = myPriv
-    ? '🔒 Tes stats sont <b>privées</b> (cachées des pages publiques, classements et temps réel). Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
-    : '🔓 Tes stats sont <b>publiques</b>. Pour les cacher : tape <code>/meyprivacy cacher</code> en jeu.'; }
+    ? '🔒 Tes stats sont <b>privées</b> (cachées des pages publiques, classements et temps réel — et sans récompenses des défis communautaires). Pour les réafficher : tape <code>/meyprivacy montrer</code> en jeu.'
+    : '🔓 Tes stats sont <b>publiques</b>. Pour les cacher : tape <code>/meyprivacy cacher</code> en jeu (en privé, tu ne reçois pas les récompenses des défis communautaires).'; }
   { const so = $("#mystats-social"); if (so) {
     const bits = [];
     const present = presenceByPlayer(res.data)[me];
@@ -1906,7 +1906,15 @@ function renderChallenges(challenges, data, me) {
     if (metric === "distTotM" || metric === "elytraM") return v >= 1000 ? fmtKm(v) : v + " m";
     return String(v);
   };
-  box.innerHTML = `<div class="comm-moments-title">🎯 Défis communautaires</div>` + active.map((c) => {
+  // Règle vie privée/équité : les récompenses sont réservées aux joueurs VISIBLES. On l'affiche
+  // toujours (personne ne doit se demander « pourquoi les autres et pas moi »), et en avertissement
+  // appuyé si le joueur du launcher est lui-même en mode privé.
+  const meEntry = (me && data && data.seen) ? data.seen[me] : null;
+  const mePriv = !!(data && data.priv && meEntry && meEntry.uuid && data.priv[meEntry.uuid] === true);
+  const privNote = mePriv
+    ? `<div class="comm-challenge-note warn">🔒 Tes stats sont privées : tu ne recevras <b>pas</b> les récompenses de ces défis tant que tu es caché. Tape <code>/meyprivacy montrer</code> en jeu pour redevenir visible — la récompense manquée arrivera à ta connexion suivante.</div>`
+    : `<div class="comm-challenge-note">Tout le serveur avance ensemble vers l'objectif. 🔒 Les récompenses (remises en jeu) sont réservées aux joueurs <b>visibles</b> — en mode privé (<code>/meyprivacy</code>), on n'en reçoit pas tant qu'on est caché.</div>`;
+  box.innerHTML = `<div class="comm-moments-title">🎯 Défis communautaires</div>` + privNote + active.map((c) => {
     const cur = aggChallenge(data, c.metric);
     const pct = Math.max(0, Math.min(100, Math.round(cur / c.target * 100)));
     const done = cur >= c.target;
