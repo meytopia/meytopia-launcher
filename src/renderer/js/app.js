@@ -1581,6 +1581,16 @@ async function loadMyStats(force) {
     if (streak >= 2) bits.push(`🔥 <b>${streak} jours</b> de connexion d'affilée`);
     const partner = myTopPartner(res.data, me);
     if (partner) bits.push(`🤝 Tu joues le plus avec <b>${escapeHtml(partner.partner)}</b> · ${fmtPlayTime(partner.minutes)} ensemble`);
+    // 🎯 « Dans ton rétro » : le joueur juste au-dessus au temps de jeu (joueurs publics uniquement —
+    // ranked vient de seen, déjà filtré). Calcul local : aucune requête en plus.
+    if (rank === 1 && ranked.length >= 2) {
+      const chaser = ranked[1];
+      bits.push(`👑 Personne devant toi — <b>${escapeHtml(chaser.name)}</b> est à ${fmtPlayTime(Math.max(1, meEntry.minutes - chaser.minutes))} derrière : garde ton trône !`);
+    } else if (rank && rank > 1) {
+      const target = ranked[rankIndex - 1];
+      const diff = Math.max(1, (target.minutes || 0) - (meEntry.minutes || 0));
+      bits.push(`🎯 Dans ton rétro : plus que <b>${fmtPlayTime(diff)}</b> de jeu pour dépasser <b>${escapeHtml(target.name)}</b> (n°${rank - 1}) !`);
+    }
     so.innerHTML = bits.length ? `<div class="mystats-social-box">${bits.map((b) => `<div>${b}</div>`).join("")}</div>` : "";
   } }
   renderMyLeaderboard(ranked, me);
@@ -2482,8 +2492,111 @@ async function loadCommunity(force) {
   renderCommunityMc(data, me);
   renderStreaks(data);
   renderDuos(data);
+  renderWrapped(res);
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
+
+// ===== 🎁 « Ta saison en chiffres » — rétro perso de la saison précédente (façon Wrapped) =====
+// Affichée les 3 premières semaines d'une nouvelle saison, si une archive existe ET que le joueur
+// y figure (les joueurs privés ne sont pas archivés : pour eux, rien ne s'affiche — cohérent).
+// Tout est calculé localement depuis l'archive déjà téléchargée par le main : zéro requête en plus.
+function wrappedNickname(s, all) {
+  // Surnom rigolo : la stat où le joueur est LE PLUS proche du sommet parmi les joueurs archivés.
+  const mc = s.mc || {};
+  const cand = [
+    ["fishCaught", "L'ami des poissons 🎣"], ["mobKills", "La terreur des monstres ⚔️"],
+    ["distTotM", "Le grand voyageur 🥾"], ["diamonds", "Cœur de diamant 💎"],
+    ["elytraM", "L'as du ciel 🪽"], ["noDeathMin", "L'increvable 🛡️"],
+  ];
+  let best = null;
+  for (const [k, label] of cand) {
+    const mine = typeof mc[k] === "number" ? mc[k] : 0;
+    if (mine <= 0) continue;
+    let max = 0;
+    for (const o of all) { const v = o.mc && typeof o.mc[k] === "number" ? o.mc[k] : 0; if (v > max) max = v; }
+    const ratio = max > 0 ? mine / max : 0;
+    if (!best || ratio > best.ratio) best = { ratio, label };
+  }
+  return best && best.ratio >= 0.5 ? best.label : "Aventurier de Meytopia 🌟";
+}
+function renderWrapped(res) {
+  const banner = $("#wrapped-banner"); const box = $("#wrapped-box");
+  if (!banner || !box) return;
+  banner.hidden = true; box.hidden = true;
+  const a = res && res.archive; const season = res && res.archiveSeason; const me = res && res.me;
+  if (!a || !a.seen || !season || !me || !a.seen[me]) return;
+  // Fenêtre : 3 premières semaines de la saison courante (si la date d'ouverture est connue).
+  const started = res.data && res.data.server && res.data.server.firstStartAt ? new Date(res.data.server.firstStartAt).getTime() : null;
+  if (started && Date.now() - started > 21 * 86400000) return;
+  $("#wrapped-season").textContent = String(season);
+  banner.hidden = false;
+  const btn = $("#wrapped-open");
+  // onclick (remplacé à CHAQUE rendu) et pas addEventListener câblé une fois : la closure doit
+  // suivre le compte actif — sinon changer de compte afficherait la rétro du joueur précédent.
+  if (btn) {
+    btn.onclick = (() => {
+      const s = a.seen[me];
+      // Joueurs archivés (tous publics par construction) pour rang et surnom.
+      const all = Object.keys(a.seen).map((n) => a.seen[n]).filter((x) => x && typeof x === "object");
+      const ranked = Object.keys(a.seen).map((n) => ({ name: n, minutes: (a.seen[n] && a.seen[n].minutes) || 0 })).sort((x, y) => y.minutes - x.minutes);
+      const rank = ranked.findIndex((p) => p.name === me) + 1;
+      const mc = s.mc || {};
+      // Jours de présence dans l'archive.
+      let jours = 0;
+      const days = a.days || {};
+      for (const d of Object.keys(days)) { const ses = days[d] && days[d].ses; if (ses && ses[me] && ses[me].length) jours++; }
+      const surnom = wrappedNickname(s, all);
+      const recordSession = a.records && a.records.longestSession && a.records.longestSession.player === me;
+      const dist = (typeof mc.distTotM === "number" && mc.distTotM > 0) ? mc.distTotM : (mc.distM || 0);
+      const stat = (emo, val, lab) => (val ? `<div class="wrapped-stat"><span class="wrapped-num">${emo} ${escapeHtml(String(val))}</span><span class="wrapped-lab">${lab}</span></div>` : "");
+      box.innerHTML =
+        `<div class="wrapped-title">🎁 Ta saison ${season} en chiffres</div>` +
+        `<div class="wrapped-nick">${escapeHtml(me)} — <b>${escapeHtml(surnom)}</b></div>` +
+        `<div class="wrapped-grid">` +
+        stat("⏱️", s.minutes ? fmtPlayTime(s.minutes) : 0, "de jeu cette saison-là") +
+        stat("📅", jours || 0, jours > 1 ? "jours de présence" : "jour de présence") +
+        stat("🏆", rank ? `n°${rank} sur ${ranked.length}` : 0, "au temps de jeu") +
+        stat("⚔️", mc.mobKills, "monstres vaincus") +
+        stat("💎", mc.diamonds, "diamants minés") +
+        stat("🥾", dist > 0 ? fmtKm(dist) : 0, "parcourus") +
+        stat("🎣", mc.fishCaught, "poissons pêchés") +
+        stat("💀", mc.deaths, "morts (chut)") +
+        `</div>` +
+        (recordSession ? `<div class="wrapped-record">🎆 Tu détenais le record de la plus longue session du serveur !</div>` : "") +
+        `<div class="wrapped-actions"><button class="ghost-btn small" id="wrapped-share">🖼️ Enregistrer l'image souvenir</button>` +
+        `<span class="wrapped-hint">Une image générée sur TON PC — rien n'est envoyé nulle part.</span></div>`;
+      box.hidden = false;
+      const share = $("#wrapped-share");
+      if (share) share.addEventListener("click", () => {
+        try {
+          const c = document.createElement("canvas"); c.width = 1000; c.height = 1000;
+          const g = c.getContext("2d");
+          g.fillStyle = "#12141c"; g.fillRect(0, 0, 1000, 1000);
+          g.fillStyle = "#8b5cf6"; g.font = "bold 52px sans-serif"; g.textAlign = "center";
+          g.fillText(`Ma saison ${season} sur Meytopia`, 500, 120);
+          g.fillStyle = "#ffffff"; g.font = "bold 44px sans-serif"; g.fillText(me, 500, 200);
+          g.fillStyle = "#fbbf24"; g.font = "32px sans-serif"; g.fillText(surnom, 500, 255);
+          g.fillStyle = "#e5e7eb"; g.font = "36px sans-serif"; g.textAlign = "left";
+          const lines = [];
+          if (s.minutes) lines.push(`⏱️  ${fmtPlayTime(s.minutes)} de jeu`);
+          if (jours) lines.push(`📅  ${jours} jour${jours > 1 ? "s" : ""} de présence`);
+          if (rank) lines.push(`🏆  n°${rank} sur ${ranked.length} au temps de jeu`);
+          if (mc.mobKills) lines.push(`⚔️  ${mc.mobKills} monstres vaincus`);
+          if (mc.diamonds) lines.push(`💎  ${mc.diamonds} diamants minés`);
+          if (dist > 0) lines.push(`🥾  ${fmtKm(dist)} parcourus`);
+          if (mc.fishCaught) lines.push(`🎣  ${mc.fishCaught} poissons pêchés`);
+          lines.slice(0, 7).forEach((l, i) => g.fillText(l, 180, 360 + i * 75));
+          g.fillStyle = "#6b7280"; g.font = "26px sans-serif"; g.textAlign = "center";
+          g.fillText("meytopia.github.io/meytopia-data", 500, 950);
+          const aEl = document.createElement("a");
+          aEl.href = c.toDataURL("image/png");
+          aEl.download = `meytopia-saison-${season}-${me}.png`;
+          aEl.click();
+        } catch (e) { toast("Image impossible à générer : " + (e.message || e)); }
+      });
+    });
+  }
+}
 
 // Rafraîchissement léger (live.json SEUL) de l'onglet Communauté quand il est visible :
 // met à jour « qui joue maintenant » + le pouls sans retélécharger le gros historique.

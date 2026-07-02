@@ -568,8 +568,20 @@ ipcMain.handle('stats:get', async () => {
       fetchJsonCached(CHALLENGES_URL, ctrl.signal),
     ]);
     clearTimeout(to);
-    return { me, meUuid, data, live, challenges };
-  } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null }; }
+    // « Ta saison en chiffres » : archive de la saison PRÉCÉDENTE si elle existe (cache
+    // conditionnel comme le reste ; 404 toléré → null et le launcher n'affiche rien).
+    let archive = null, archiveSeason = null;
+    try {
+      const season = data && data.server && typeof data.server.season === 'number' ? data.server.season : 0;
+      if (season >= 2) {
+        const { RAW_BASE } = require('./config');
+        archiveSeason = season - 1;
+        archive = await fetchJsonCached(`${RAW_BASE}/seasons/saison-${archiveSeason}.json`);
+        if (!archive) archiveSeason = null;
+      }
+    } catch { archive = null; archiveSeason = null; }
+    return { me, meUuid, data, live, challenges, archive, archiveSeason };
+  } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null, archive: null, archiveSeason: null }; }
 });
 
 // Etat temps reel SEUL (live.json, petit fichier) — pour le rafraichissement frequent

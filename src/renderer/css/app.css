@@ -1436,3 +1436,18 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .mystats-cmp-b { text-align: left; font-variant-numeric: tabular-nums; }
 .mystats-cmp-lab { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
 .mystats-cmp-a.win, .mystats-cmp-b.win { color: var(--success); font-weight: 700; }
+/* 🎁 « Ta saison en chiffres » — rétro perso de la saison précédente (façon Wrapped) */
+.wrapped-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: linear-gradient(90deg, rgba(139,92,246,.18), rgba(251,191,36,.12));
+  border: 1px solid rgba(139,92,246,.45); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+.wrapped-banner-text { font-size: 14px; }
+.wrapped-box { background: var(--surface); border: 1px solid rgba(139,92,246,.45); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.wrapped-title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
+.wrapped-nick { color: var(--text-dim); margin-bottom: 12px; }
+.wrapped-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.wrapped-stat { background: var(--surface-high); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.wrapped-num { font-weight: 700; font-size: 16px; }
+.wrapped-lab { color: var(--text-dim); font-size: 12px; }
+.wrapped-record { margin-top: 10px; color: #fbbf24; font-weight: 600; }
+.wrapped-actions { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wrapped-hint { color: var(--text-dim); font-size: 12px; }

@@ -11,6 +11,7 @@ const LIVE_URL = `https://raw.githubusercontent.com/${DATA_OWNER}/${DATA_REPO}/s
 const CHALLENGES_URL = `${RAW_BASE}/challenges.json`;
 
 module.exports = {
+  RAW_BASE,
   DATA_OWNER,
   DATA_REPO,
   STATS_URL,
