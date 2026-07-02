@@ -1519,8 +1519,8 @@ async function loadMyStats(force) {
     const cards = [];
     const add = (emo, val, lab, pctKey, pctRaw) => {
       if (val != null && val !== 0) {
-        const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null;
-        cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct">top ${pct}%</span>` : ""}</div></div>`);
+        const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null; // étiquette complète (« n°1 sur 3 » ou « top 12% »)
+        cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct">${escapeHtml(pct)}</span>` : ""}</div></div>`);
       }
     };
     if (mc) {
@@ -1717,17 +1717,17 @@ function statMinuteOfDay(slotIndex) { return slotIndex; } // 1 slot = 1 minute (
 function statDayKeys(data) { return Object.keys(data.days || {}).sort(); }
 function statTodayKey() { return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(new Date()); }
 
-// Calcule, pour chaque joueur, des indicateurs derivables des donnees de presence
+// Calcule, pour chaque joueur PUBLIC, des indicateurs derivables des donnees de presence
+// (joueurs /meyprivacy exclus : leurs pseudos ne doivent apparaître dans AUCUN bloc).
 function computePlayerMetrics(data) {
-  const seen = data.seen || {};
   const days = data.days || {};
   const metrics = {};
-  for (const name of Object.keys(seen)) {
+  for (const [name, s] of pubEntries(data)) {
     metrics[name] = {
       name,
-      minutes: seen[name].minutes || 0,
-      first: seen[name].first,
-      last: seen[name].last,
+      minutes: s.minutes || 0,
+      first: s.first,
+      last: s.last,
       days: 0,            // nb de jours distincts vus
       latestSlot: -1,     // créneau le plus tardif (couche-tard)
       earliestSlot: 1441, // créneau le plus matinal (lève-tôt)
@@ -1743,17 +1743,21 @@ function computePlayerMetrics(data) {
     const slots = Array.isArray(d.slots) ? d.slots : [];
     for (const name of Object.keys(presence)) {
       if (!metrics[name]) continue;
-      const arr = (presence[name] || []).slice().sort((a, b) => a - b);
+      // Set : une déco/reco dans la même minute produit des indices en double dans presence —
+      // sans dédoublonnage, longestSession/nightMin/soloMin/crowdMin seraient gonflées.
+      const arr = [...new Set(presence[name] || [])].sort((a, b) => a - b);
       if (!arr.length) continue;
       metrics[name].days += 1;
       metrics[name].latestSlot = Math.max(metrics[name].latestSlot, arr[arr.length - 1]);
       metrics[name].earliestSlot = Math.min(metrics[name].earliestSlot, arr[0]);
       // nuit (0h-6h = slots 0..359)
       metrics[name].nightMin += arr.filter((s) => s < 360).length;
-      // plus longue session continue (trous <= 2 min tolérés)
+      // plus longue session continue : on compte les minutes RÉELLEMENT présentes (un trou <= 2 min
+      // maintient la continuité mais n'est pas ajouté — sinon la session serait gonflée et divergerait
+      // du record « plus longue session » publié par le mod).
       let run = 1, best = 1;
       for (let i = 1; i < arr.length; i++) {
-        if (arr[i] - arr[i - 1] <= 2) { run += arr[i] - arr[i - 1]; best = Math.max(best, run); }
+        if (arr[i] - arr[i - 1] <= 2) { run += 1; best = Math.max(best, run); }
         else run = 1;
       }
       metrics[name].longestSession = Math.max(metrics[name].longestSession, best);
@@ -1781,7 +1785,8 @@ function heroCategories() {
     return sorted.length ? sorted[0] : null;
   };
   return [
-    { emoji: "👑", title: "Le plus assidu de la saison", detail: (w) => `${fmtPlayTime(w.minutes)} de jeu au total`, pick: (a) => top(a, "minutes") },
+    // (pas de catégorie « plus assidu » ici : le classement Temps en jeu l'affiche déjà en permanence —
+    // la rotation du titre du jour privilégie les titres originaux qu'on ne voit nulle part ailleurs)
     { emoji: "🦉", title: "Le couche-tard", detail: (w) => `aperçu jusqu'à ${fmtSlotHM(w.latestSlot)}`, pick: (a) => { const lateScore = (p) => p.latestSlot < 0 ? -1 : (p.latestSlot < 360 ? p.latestSlot + 1440 : p.latestSlot); const s = a.filter((p) => p.latestSlot >= 1260 || (p.latestSlot >= 0 && p.latestSlot < 360)).sort((x, y) => lateScore(y) - lateScore(x)); return s.length ? s[0] : null; } }, // après 21h (ou jusqu'au petit matin) seulement
     { emoji: "🌅", title: "Le lève-tôt", detail: (w) => `déjà là dès ${fmtSlotHM(w.earliestSlot)}`, pick: (a) => { const s = a.filter((p) => p.earliestSlot >= 0 && p.earliestSlot < 600).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; } }, // avant 10h seulement (sinon ce n'est pas un lève-tôt)
     { emoji: "🏃", title: "Le marathonien", detail: (w) => `plus longue session : ${fmtPlayTime(w.longestSession)}`, pick: (a) => top(a, "longestSession", 2) },
@@ -1849,7 +1854,15 @@ function aggChallenge(data, metric) {
     default: return 0;
   }
 }
-function renderChallenges(challenges, data) {
+// Contribution personnelle du joueur courant à un défi (même famille de source que le repli d'aggChallenge).
+function myChallengeShare(data, metric, me) {
+  if (!me || !data || !data.seen || !data.seen[me]) return null;
+  const s = data.seen[me];
+  if (metric === "totalPlayMinutes") return s.minutes || 0;
+  if (s.mc && typeof s.mc[metric] === "number") return s.mc[metric];
+  return null;
+}
+function renderChallenges(challenges, data, me) {
   const box = $("#comm-challenges");
   if (!box) return;
   const list = (challenges && Array.isArray(challenges.challenges)) ? challenges.challenges : [];
@@ -1863,21 +1876,31 @@ function renderChallenges(challenges, data) {
     const cur = aggChallenge(data, c.metric);
     const pct = Math.max(0, Math.min(100, Math.round(cur / c.target * 100)));
     const done = cur >= c.target;
+    const mine = myChallengeShare(data, c.metric, me);
     return `<div class="comm-challenge${done ? " done" : ""}">`
       + `<div class="comm-challenge-head"><span>${escapeHtml(c.title || "Défi")}</span>`
       + `<span class="comm-challenge-num">${escapeHtml(fmtV(c.metric, Math.min(cur, c.target)))} / ${escapeHtml(fmtV(c.metric, c.target))}${done ? " ✓" : ""}</span></div>`
       + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${pct}"></div></div>`
+      + (mine != null && mine > 0 && !done ? `<div class="comm-challenge-mine">dont toi : ${escapeHtml(fmtV(c.metric, mine))}</div>` : "")
       + (c.reward ? `<div class="comm-challenge-reward">🎁 ${escapeHtml(c.reward)}</div>` : "")
       + `</div>`;
   }).join("");
   box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
 }
 // ===== Features communautaires (calculées sur seen/days ; joueurs privés exclus via pubEntries) =====
+// Format kilomètres UNIQUE pour toute la page (fr-FR, 1 décimale max, zéros superflus coupés) —
+// évite « 142 km » dans un bloc et « 124.7 km » dans le voisin pour les mêmes données.
+function fmtKm(meters) {
+  return (meters / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " km";
+}
 function collectiveStats(data) {
+  // TOUT en TOTAUX RÉELS (depuis le début de Meytopia) : mc.playMin pour le temps, comme les autres compteurs
+  // mc.* — plus de mélange avec les minutes de saison qui rendait le bloc incohérent (« 1 h de jeu, 142 km »).
   let mobs = 0, dist = 0, diamonds = 0, fish = 0, minutes = 0, players = 0;
   for (const [, s] of pubEntries(data)) {
-    players++; minutes += s.minutes || 0;
+    players++;
     const mc = s.mc || {};
+    minutes += (typeof mc.playMin === "number" && mc.playMin > 0) ? mc.playMin : (s.minutes || 0);
     mobs += mc.mobKills || 0;
     dist += (typeof mc.distTotM === "number" ? mc.distTotM : (mc.distM || 0));
     diamonds += mc.diamonds || 0;
@@ -1885,58 +1908,98 @@ function collectiveStats(data) {
   }
   return { mobs, distM: dist, diamonds, fish, minutes, players };
 }
+// Jalons collectifs : célébrations AUTOMATIQUES à paliers fixes (rien à voir avec les défis de la régie).
+// Renvoie les caps franchis (célébration) ET le prochain cap le plus proche en % (teaser de progression).
 function collectiveMilestones(c) {
-  const out = [];
-  const pick = (val, paliers, fmt) => { let best = null; for (const p of paliers) if (val >= p) best = p; if (best != null) out.push(fmt(best)); };
+  const reached = [];
+  let next = null; // { label, cur, target, pct } — le palier non atteint le plus proche (pct max)
+  const pick = (val, paliers, fmt) => {
+    let best = null, upcoming = null;
+    for (const p of paliers) { if (val >= p) best = p; else { upcoming = p; break; } }
+    if (best != null) reached.push(fmt(best));
+    if (upcoming != null && val > 0) {
+      const pct = Math.min(99, Math.round(val / upcoming * 100));
+      if (!next || pct > next.pct) next = { label: fmt(upcoming), cur: val, target: upcoming, pct };
+    }
+  };
   pick(Math.floor(c.minutes / 60), [50, 100, 250, 500, 1000, 2500, 5000, 10000], (v) => "🎮 " + v.toLocaleString("fr-FR") + " h de jeu cumulées");
   pick(c.mobs, [1000, 5000, 10000, 50000, 100000], (v) => "⚔️ " + v.toLocaleString("fr-FR") + " monstres terrassés");
   pick(c.diamonds, [100, 500, 1000, 5000], (v) => "💎 " + v.toLocaleString("fr-FR") + " diamants minés");
   pick(Math.floor(c.distM / 1000), [100, 500, 1000, 5000, 40075], (v) => "🥾 " + v.toLocaleString("fr-FR") + " km parcourus");
-  return out;
+  return { reached, next };
+}
+// Mini activité de la semaine : pic de joueurs par jour sur les 7 derniers jours (barres CSS, zéro requête).
+function weekActivityHtml(data) {
+  const days = (data && data.days) ? data.days : {};
+  const today = statTodayKey();
+  const items = [];
+  let maxPeak = 0;
+  for (let i = 6; i >= 0; i--) {
+    const k = dayKeyShift(today, -i);
+    const pk = days[k] ? maxSlot(days[k].slots || []) : 0;
+    maxPeak = Math.max(maxPeak, pk);
+    const lbl = new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "narrow" });
+    items.push({ k, pk, lbl, isToday: k === today });
+  }
+  if (!maxPeak) return "";
+  return `<div class="comm-week"><span class="comm-week-title">📈 La semaine</span>`
+    + items.map((d) => `<div class="comm-week-day${d.isToday ? " today" : ""}" title="${escapeHtml(d.k)} — pic ${d.pk}">`
+      + `<div class="comm-week-bar"><div class="comm-week-fill" data-h="${d.pk ? Math.max(6, Math.round(d.pk / maxPeak * 100)) : 0}"></div></div>`
+      + `<span class="comm-week-lbl">${escapeHtml(d.lbl)}</span></div>`).join("")
+    + `</div>`;
 }
 function renderCollective(data) {
   const box = $("#comm-collective"); if (!box) return;
   const c = collectiveStats(data);
   if (!c.players) { box.innerHTML = ""; return; }
-  const km = Math.round(c.distM / 1000);
   const earth = c.distM / 1000 / 40075;
   const cards = [
     ["🎮", fmtPlayTime(c.minutes), "de jeu cumulé"],
     ["⚔️", c.mobs.toLocaleString("fr-FR"), "monstres tués"],
-    ["🥾", km.toLocaleString("fr-FR") + " km", earth >= 0.1 ? "soit " + earth.toFixed(1) + "× le tour de la Terre" : "parcourus"],
+    ["🥾", fmtKm(c.distM), earth >= 0.1 ? "soit " + earth.toFixed(1) + "× le tour de la Terre" : "parcourus"],
     ["💎", c.diamonds.toLocaleString("fr-FR"), "diamants minés"],
   ];
   const ms = collectiveMilestones(c);
-  box.innerHTML = `<div class="comm-moments-title">📊 Le serveur en chiffres</div>`
+  box.innerHTML = `<div class="comm-moments-title">📊 Le serveur en chiffres<span class="comm-period">depuis le début de Meytopia</span></div>`
     + `<div class="comm-stats-grid">`
     + cards.map(([e, v, l]) => `<div class="comm-stat"><div class="comm-stat-emoji">${e}</div><div class="comm-stat-val">${escapeHtml(v)}</div><div class="comm-stat-label">${escapeHtml(l)}</div></div>`).join("")
     + `</div>`
-    + (ms.length ? `<div class="comm-milestones">${ms.map((m) => `<span class="comm-milestone">✅ ${escapeHtml(m)}</span>`).join("")}</div>` : "");
+    // Caps franchis = CÉLÉBRATION (🎉), visuellement distincte des défis de la régie (qui, eux, sont des objectifs).
+    + (ms.reached.length ? `<div class="comm-milestones">${ms.reached.map((m) => `<span class="comm-milestone">🎉 ${escapeHtml(m)} — cap franchi !</span>`).join("")}</div>` : "")
+    // Prochain cap : la communauté voit où elle va (barre de progression).
+    + (ms.next ? `<div class="comm-next-milestone"><div class="comm-challenge-head"><span>Prochain cap : ${escapeHtml(ms.next.label)}</span>`
+      + `<span class="comm-challenge-num">${ms.next.pct}%</span></div>`
+      + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${ms.next.pct}"></div></div></div>` : "")
+    + weekActivityHtml(data);
+  box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
+  box.querySelectorAll(".comm-week-fill").forEach((el) => { el.style.height = (Number(el.dataset.h) || 0) + "%"; }); // plancher géré à la génération (0 = jour vide, barre vide)
 }
-function champions(data) {
+// « Les titres de la saison » : distinctions ORIGINALES calculées sur la présence (marathonien, fidèle,
+// noctambule…) — les anciens « champions » doublonnaient les n°1 des Classements en jeu juste en dessous.
+function seasonTitles(data, metrics) {
+  const arr = Object.values(metrics || {});
+  if (!arr.length) return [];
+  const seen = (data && data.seen) || {};
+  const top = (key, min) => { const s = arr.filter((p) => (p[key] || 0) >= min).sort((a, b) => b[key] - a[key]); return s.length ? s[0] : null; };
   const cats = [
-    { emoji: "👑", label: "Le plus assidu", get: (s) => s.minutes || 0, fmt: (v) => fmtPlayTime(v) },
-    { emoji: "⚔️", label: "Tueur de monstres", get: (s) => (s.mc && s.mc.mobKills) || 0, fmt: (v) => v + " mobs" },
-    { emoji: "🥾", label: "Grand voyageur", get: (s) => (s.mc && (s.mc.distTotM || s.mc.distM)) || 0, fmt: (v) => v >= 1000 ? (v / 1000).toFixed(1) + " km" : v + " m" },
-    { emoji: "💎", label: "Mineur de diamant", get: (s) => (s.mc && s.mc.diamonds) || 0, fmt: (v) => v + " 💎" },
-    { emoji: "🎣", label: "Pêcheur", get: (s) => (s.mc && s.mc.fishCaught) || 0, fmt: (v) => v + " poissons" },
-    { emoji: "🏆", label: "Chasseur de succès", get: (s) => (s.mc && s.mc.adv) || 0, fmt: (v) => v + " succès" },
+    { emoji: "🏃", label: "Le marathonien", win: top("longestSession", 2), fmt: (w) => fmtPlayTime(w.longestSession) + " d'une traite" },
+    { emoji: "📅", label: "Le fidèle", win: top("days", 2), fmt: (w) => `présent ${w.days} jours` },
+    { emoji: "🌅", label: "Le lève-tôt", win: (() => { const s = arr.filter((p) => p.earliestSlot >= 0 && p.earliestSlot < 600).sort((x, y) => x.earliestSlot - y.earliestSlot); return s.length ? s[0] : null; })(), fmt: (w) => `dès ${fmtSlotHM(w.earliestSlot)}` },
+    { emoji: "🌙", label: "Le noctambule", win: top("nightMin", 2), fmt: (w) => fmtPlayTime(w.nightMin) + " après minuit" },
+    { emoji: "🎉", label: "L'âme de la fête", win: top("crowdMin", 2), fmt: (w) => fmtPlayTime(w.crowdMin) + " quand ça grouille" },
+    { emoji: "🧭", label: "Le solitaire", win: top("soloMin", 5), fmt: (w) => fmtPlayTime(w.soloMin) + " en solo" },
   ];
-  const pub = pubEntries(data);
-  const out = [];
-  for (const cat of cats) {
-    let best = null;
-    for (const [name, s] of pub) { const v = cat.get(s); if (v > 0 && (!best || v > best.v)) best = { name, uuid: s.uuid, v }; }
-    if (best) out.push({ emoji: cat.emoji, label: cat.label, name: best.name, uuid: best.uuid, value: cat.fmt(best.v) });
-  }
-  return out;
+  return cats.filter((c) => c.win).map((c) => ({
+    emoji: c.emoji, label: c.label, name: c.win.name,
+    uuid: (seen[c.win.name] && seen[c.win.name].uuid) || null, value: c.fmt(c.win),
+  }));
 }
-function renderHallOfFame(data) {
+function renderHallOfFame(data, metrics) {
   const box = $("#comm-hof"); if (!box) return;
-  const champs = champions(data);
-  if (!champs.length) { box.innerHTML = ""; return; }
-  box.innerHTML = `<div class="comm-moments-title">🏅 Le mur des champions</div><div class="comm-hof-grid">`
-    + champs.map((c) => `<div class="comm-hof-card"><div class="comm-hof-cat">${c.emoji} ${escapeHtml(c.label)}</div>`
+  const titles = seasonTitles(data, metrics);
+  if (!titles.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="comm-moments-title">🏅 Les titres de la saison</div><div class="comm-hof-grid">`
+    + titles.map((c) => `<div class="comm-hof-card"><div class="comm-hof-cat">${c.emoji} ${escapeHtml(c.label)}</div>`
       + `<div class="comm-hof-name"><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(c.uuid || c.name)}/24" alt="">${escapeHtml(c.name)}</div>`
       + `<div class="comm-hof-val">${escapeHtml(c.value)}</div></div>`).join("")
     + `</div>`;
@@ -2015,12 +2078,15 @@ function renderDuos(data) {
     + list.map((d, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(d.a)} + ${escapeHtml(d.b)}</span><span class="comm-rank-val">${fmtPlayTime(d.minutes)} ensemble</span></div>`).join("")
     + `</div>`;
 }
+// Étiquette de position : rang exact sous 10 joueurs (« n°1 sur 3 » — un percentile n'a aucun sens
+// à cette échelle : le n°1 sur 3 s'affichait « top 33% »), percentile au-delà.
 function percentileOf(data, key, myVal) {
   if (myVal == null || myVal <= 0) return null;
   const vals = pubEntries(data).map(([, s]) => (s.mc && typeof s.mc[key] === "number") ? s.mc[key] : null).filter((v) => v != null && v > 0);
   if (vals.length < 3) return null;
   const rank = vals.filter((v) => v > myVal).length + 1;
-  return Math.max(1, Math.round((rank / vals.length) * 100));
+  if (vals.length < 10) return `n°${rank} sur ${vals.length}`;
+  return "top " + Math.max(1, Math.round((rank / vals.length) * 100)) + "%";
 }
 function myTopPartner(data, me) {
   const d = computeDuos(data).find((x) => x.a === me || x.b === me);
@@ -2036,13 +2102,15 @@ function renderCommunityRecords(data) {
   for (const [d, obj] of Object.entries(days)) { const pk = peakOf(obj); if (pk > peak) { peak = pk; peakDay = d; } }
   const pub = pubEntries(data);
   const uniques = pub.length;
-  let totalMin = 0; for (const [, s] of pub) totalMin += (s.minutes || 0);
   const today = statTodayKey();
   const todayPeak = days[today] ? peakOf(days[today]) : 0;
   let otherPeak = 0;
   for (const [d, obj] of Object.entries(days)) { if (d === today) continue; const pk = peakOf(obj); if (pk > otherPeak) otherPeak = pk; }
-  const newRecord = todayPeak > 0 && todayPeak > otherPeak;
   const rec = (data && data.records) ? data.records : {};
+  // « Nouveau record » seulement si le pic du jour dépasse AUSSI le record officiel persisté par le mod
+  // (sauf s'il date d'aujourd'hui : c'est alors le même événement).
+  const recPeak = (rec.peakPlayers && typeof rec.peakPlayers.value === "number" && rec.peakPlayers.day !== today) ? rec.peakPlayers.value : 0;
+  const newRecord = todayPeak > 0 && todayPeak > Math.max(otherPeak, recPeak);
   const season = (data && data.server && typeof data.server.season === "number") ? data.server.season : null;
   // Pic : record DATÉ persisté par le mod si dispo (autoritaire), sinon dérivé des jours.
   let peakVal = peak, peakWhen = peakDay ? fmtShortDate(peakDay) : null;
@@ -2051,13 +2119,16 @@ function renderCommunityRecords(data) {
     peakWhen = rec.peakPlayers.day ? fmtShortDate(rec.peakPlayers.day) : (rec.peakPlayers.at ? fmtShortDate(rec.peakPlayers.at) : peakWhen);
   }
   if (!peakVal && !uniques) { box.innerHTML = ""; return; }
+  // (le « temps de jeu cumulé » n'est pas un record : il vit dans « Le serveur en chiffres », pas ici)
   const cards = [
-    { e: "👥", v: String(peakVal), l: "joueurs en simultané", sub: "record" + (peakWhen ? " · " + peakWhen : "") },
+    { e: "👥", v: String(peakVal), l: peakVal > 1 ? "joueurs en simultané" : "joueur en simultané", sub: "record" + (peakWhen ? " · " + peakWhen : "") },
     { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs uniques" : "joueur unique" },
-    { e: "⏱️", v: fmtPlayTime(totalMin), l: "temps de jeu cumulé" },
   ];
   if (rec.longestSession && typeof rec.longestSession.minutes === "number" && rec.longestSession.minutes > 0) {
     cards.push({ e: "🏃", v: fmtPlayTime(rec.longestSession.minutes), l: "plus longue session", sub: rec.longestSession.player ? "par " + rec.longestSession.player : "" });
+  }
+  if (rec.longestUptime && typeof rec.longestUptime.seconds === "number" && rec.longestUptime.seconds >= 3600) {
+    cards.push({ e: "🖥️", v: fmtPlayTime(Math.round(rec.longestUptime.seconds / 60)), l: "plus long allumage du serveur" });
   }
   box.innerHTML =
     (newRecord ? `<div class="comm-record-banner">🎉 Nouveau record : ${todayPeak} joueur${todayPeak > 1 ? "s" : ""} en même temps aujourd'hui !</div>` : "")
@@ -2067,22 +2138,23 @@ function renderCommunityRecords(data) {
     + `</div>`;
 }
 
-// Classements en jeu (depuis seen[].mc), visibles par tous dans l'onglet Communauté.
-function renderCommunityMc(data) {
+// Classements en jeu (depuis seen[].mc = TOTAUX RÉELS), visibles par tous dans l'onglet Communauté.
+// Le n°1 porte la couronne (les anciens « champions » doublonnaient ce podium) ; la ligne du joueur
+// courant est marquée « toi » ; s'il est hors podium, son rang s'affiche en pied de colonne.
+function renderCommunityMc(data, me) {
   const box = $("#comm-mc");
   if (!box) return;
-  const seen = (data && data.seen) ? data.seen : {};
-  const fmtDist = (m) => m >= 1000 ? (m / 1000).toFixed(1) + " km" : m + " m";
   const metrics = [
     { key: "mobKills", label: "⚔️ Tueurs de monstres", fmt: (v) => v + " mobs" },
     { key: "playMin", label: "⏱ Temps en jeu", fmt: (v) => fmtPlayTime(v) },
-    { key: "distTotM", alt: "distM", label: "🥾 Distance parcourue", fmt: fmtDist },
+    { key: "distTotM", alt: "distM", label: "🥾 Distance parcourue", fmt: (v) => v >= 1000 ? fmtKm(v) : v + " m" },
     { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => v + " minerais" },
     { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => v + " poissons" },
     { key: "noDeathMin", label: "🛡️ Série sans mourir", fmt: (v) => fmtPlayTime(v) },
     { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
   ];
   let any = false;
+  const row = (r, i, m) => `<div class="comm-rank${me && r.name === me ? " is-me" : ""}"><span class="comm-rank-pos comm-rank-${Math.min(i + 1, 3)}">${i === 0 ? "👑" : i + 1}</span><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}${me && r.name === me ? '<span class="me-tag">toi</span>' : ""}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`;
   const cols = metrics.map((m) => {
     const ranked = pubEntries(data)
       .map(([name, s]) => {
@@ -2091,22 +2163,30 @@ function renderCommunityMc(data) {
         return { name, uuid: (s && s.uuid) || null, v };
       })
       .filter((x) => x.v != null && x.v > 0)
-      .sort((a, b) => b.v - a.v).slice(0, 3);
+      .sort((a, b) => b.v - a.v);
     if (ranked.length) any = true;
-    const rows = ranked.length
-      ? ranked.map((r, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`).join("")
+    const podium = ranked.slice(0, 3);
+    let rows = podium.length
+      ? podium.map((r, i) => row(r, i, m)).join("")
       : '<div class="comm-board-empty">Pas encore de données</div>';
+    // Le joueur courant hors podium : sa ligne apparaît quand même (avec son vrai rang).
+    if (me) {
+      const myIdx = ranked.findIndex((r) => r.name === me);
+      if (myIdx >= 3) rows += row(ranked[myIdx], myIdx, m);
+    }
     return `<div class="comm-board"><div class="comm-board-title">${m.label}</div>${rows}</div>`;
   }).join("");
-  box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu</div><div class="comm-boards">${cols}</div>` : "";
+  box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu<span class="comm-period">depuis le début de Meytopia</span></div><div class="comm-boards">${cols}</div>` : "";
   box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
 }
 
-// Détection des "moments" du serveur depuis les données
+// Détection des "moments" du serveur depuis les données (joueurs /meyprivacy exclus : leurs pseudos
+// ne doivent apparaître nulle part — même règle que tous les autres blocs de la page).
 function detectMoments(data) {
   const moments = [];
   const days = data.days || {};
-  const seen = data.seen || {};
+  const pub = pubEntries(data);
+  const pubNames = new Set(pub.map(([n]) => n));
   const dayKeys = statDayKeys(data);
   const today = statTodayKey();
   const dayLabelFr = (k) => { try { return new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); } catch { return k; } };
@@ -2129,46 +2209,82 @@ function detectMoments(data) {
     if (pk >= 2 && today !== recordDay) moments.push({ emoji: "📈", text: `Aujourd'hui, jusqu'à ${pk} joueurs réunis`, when: "aujourd'hui" });
   }
 
-  // 3) Nouveaux joueurs des 7 derniers jours
+  // 3) Premières connexions des 7 derniers jours (seen[].first = première vue DE LA SAISON, on le dit).
+  //    Si TOUT le monde est « nouveau », c'est que la saison vient d'ouvrir — on le dit plutôt que de
+  //    présenter la liste entière des joueurs comme des recrues.
   const weekAgo = Date.now() - 7 * 86400000;
-  const newcomers = Object.entries(seen).filter(([, s]) => s.first && new Date(s.first).getTime() >= weekAgo).map(([n]) => n);
-  if (newcomers.length === 1) moments.push({ emoji: "👋", text: `Bienvenue à ${newcomers[0]}, nouveau cette semaine !`, when: "cette semaine" });
-  else if (newcomers.length > 1) moments.push({ emoji: "👋", text: `${newcomers.length} nouveaux joueurs ont rejoint le serveur`, when: "cette semaine" });
+  const isNew = (s) => s && s.first && new Date(s.first).getTime() >= weekAgo;
+  const newcomers = pub.filter(([, s]) => isNew(s)).map(([n]) => n);
+  const season = (data && data.server && typeof data.server.season === "number") ? data.server.season : null;
+  // « Saison vient d'ouvrir » : trois conditions, car le seen PUBLIÉ ne contient jamais les joueurs
+  // privés (la sonde les retire) — tester seen seul déclencherait le message à tort en pleine saison :
+  //  1. privCount === 0 (compteur anonyme publié par le mod) : aucun vétéran caché derrière /meyprivacy ;
+  //  2. la saison est réellement jeune (server.firstStartAt < 7 jours ; absent → on ne bloque pas) ;
+  //  3. tous les joueurs vus sont arrivés cette semaine.
+  const allSeen = Object.values((data && data.seen) || {});
+  const privCount = (data && typeof data.privCount === "number") ? data.privCount : 0;
+  const openedMs = (data && data.server && data.server.firstStartAt) ? new Date(data.server.firstStartAt).getTime() : NaN;
+  const seasonYoung = Number.isFinite(openedMs) ? openedMs >= weekAgo : true;
+  if (privCount === 0 && seasonYoung && allSeen.length && allSeen.every(isNew) && newcomers.length) {
+    moments.push({ emoji: "🚀", text: season ? `La saison ${season} vient d'ouvrir — ${pub.length} joueur${pub.length > 1 ? "s" : ""} déjà en jeu` : "Le serveur vient d'ouvrir ses portes", when: "cette semaine" });
+  } else if (newcomers.length === 1) moments.push({ emoji: "👋", text: `${newcomers[0]} a fait ses premiers pas cette saison !`, when: "cette semaine" });
+  else if (newcomers.length > 1) moments.push({ emoji: "👋", text: `${newcomers.length} joueurs ont fait leurs premiers pas cette saison`, when: "cette semaine" });
 
-  // 4) Couche-tard récent (quelqu'un vu après 1h du matin)
+  // 4) Couche-tard récent (quelqu'un vu après 1h du matin) — joueurs publics uniquement
   let latestName = null, latestSlot = -1;
   if (days[today]) {
     const presence = days[today].presence || {};
     for (const name of Object.keys(presence)) {
+      if (!pubNames.has(name)) continue;
       const arr = presence[name] || [];
-      const mx = arr.length ? Math.max(...arr) : -1;
+      let mx = -1; for (const v of arr) if (v > mx) mx = v; // pas de Math.max(...arr) : arr peut faire 1440 entrées
       if (mx > latestSlot) { latestSlot = mx; latestName = name; }
     }
     if (latestSlot >= 60 && latestSlot < 360) moments.push({ emoji: "🌙", text: `${latestName} a veillé jusqu'à ${fmtSlotHM(latestSlot)} cette nuit`, when: "la nuit dernière" });
   }
 
-  // 5) Joueur le plus assidu (figure de proue)
-  const topPlayer = Object.entries(seen).map(([n, s]) => ({ n, m: s.minutes || 0 })).sort((a, b) => b.m - a.m)[0];
-  if (topPlayer && topPlayer.m >= 120) moments.push({ emoji: "🏆", text: `${topPlayer.n} mène la saison avec ${fmtPlayTime(topPlayer.m)} de jeu`, when: "depuis le début" });
+  // 5) Joueur le plus assidu de la saison (figure de proue) — joueurs publics uniquement
+  const topPlayer = pub.map(([n, s]) => ({ n, m: s.minutes || 0 })).sort((a, b) => b.m - a.m)[0];
+  if (topPlayer && topPlayer.m >= 120) moments.push({ emoji: "🏆", text: `${topPlayer.n} mène la saison avec ${fmtPlayTime(topPlayer.m)} de jeu`, when: "cette saison" });
 
-  // 6) Jour le plus animé
+  // 6) DEUXIÈME plus beau jour (le record est déjà le moment n°1 — sans l'exclure, ce bloc ne
+  //    s'affichait jamais : c'était du code mort).
   let bestDay = null, bestPeak = 0;
   for (const k of dayKeys) {
-    const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = maxSlot(slots);
+    if (k === recordDay || k === today) continue;
+    const pk = maxSlot((days[k].slots || []).filter((v) => typeof v === "number" && v >= 0));
     if (pk > bestPeak) { bestPeak = pk; bestDay = k; }
   }
-  if (bestDay && bestPeak >= 2 && bestDay !== recordDay && bestDay !== today) {
+  if (bestDay && bestPeak >= 2) {
     moments.push({ emoji: "🎊", text: `${dayLabelFr(bestDay)} restera un beau jour : ${bestPeak} joueurs`, when: dayLabelFr(bestDay) });
   }
 
   return moments;
 }
 
-// Texte de pouls selon le nombre de joueurs et l'heure
+// Texte de pouls selon le nombre de joueurs et l'heure (heure SERVEUR Europe/Paris : les messages
+// « couche-tard / lève-tôt / nuit calme » parlent de la vie du serveur, pas du fuseau du joueur).
+// parseInt obligatoire : le format fr renvoie « 16 h » (suffixe collé) → Number() donnerait NaN
+// silencieusement et les variantes horaires ne s'afficheraient plus jamais.
+// Formateur hissé en constante : pulseMessage est appelé toutes les 3 s par la boucle statut de
+// l'Accueil — pas question d'instancier un Intl.DateTimeFormat à chaque battement (règle perf).
+const PULSE_HOUR_FMT = (() => {
+  try { return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", hour12: false }); }
+  catch { return null; }
+})();
+const PARIS_HM_FMT = (() => {
+  try { return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", minute: "numeric", hour12: false }); }
+  catch { return null; }
+})();
 function pulseMessage(online, count) {
-  const h = new Date().getHours();
-  if (online === false || online === null) {
+  let h = NaN;
+  try { if (PULSE_HOUR_FMT) h = parseInt(PULSE_HOUR_FMT.format(new Date()), 10); } catch { h = NaN; }
+  if (!Number.isFinite(h)) h = new Date().getHours();
+  // null = on ne SAIT PAS (live périmé/injoignable) — ne pas affirmer que le serveur est éteint.
+  if (online === null || online === undefined) {
+    return { emoji: "🛰", text: "État du serveur inconnu", sub: "Dernier relevé trop ancien — réessaie dans un instant" };
+  }
+  if (online === false) {
     return { emoji: "😴", text: "Serveur au repos", sub: "Reviens un peu plus tard" };
   }
   if (count >= 6) return { emoji: "🔥", text: `Ça grouille ! ${count} joueurs en ligne`, sub: "C'est le moment de jouer" };
@@ -2224,8 +2340,9 @@ function renderLivePanel(live) {
       list.appendChild(chip);
     }
   } else {
+    // (le pouls dit déjà « sois le premier » : ici on reste factuel pour ne pas répéter la même phrase)
     list.textContent = live.online
-      ? "Personne en ligne pour le moment — sois le premier !"
+      ? "Personne en ligne — le serveur tourne et t'attend."
       : "Le serveur est éteint.";
   }
   return live;
@@ -2261,11 +2378,22 @@ async function loadCommunity(force) {
     lastOnline = Boolean(liveFresh.online);
     lastCount = liveFresh.online ? (liveFresh.count || 0) : 0;
   } else if (data && data.days) {
+    // Repli sans live frais : le dernier relevé du jour ne vaut que s'il est RÉCENT (≤ 10 min) —
+    // sinon on afficherait « X joueurs en ligne » d'après un relevé vieux de plusieurs heures.
     const today = statTodayKey();
     if (data.days[today]) {
       const slots = data.days[today].slots || [];
+      let nowMin = 0;
+      try {
+        const parts = PARIS_HM_FMT ? PARIS_HM_FMT.format(new Date()).split(":") : null;
+        nowMin = parts ? Number(parts[0]) * 60 + Number(parts[1]) : NaN;
+      } catch { nowMin = NaN; }
+      if (!Number.isFinite(nowMin)) { const n = new Date(); nowMin = n.getHours() * 60 + n.getMinutes(); }
       for (let i = slots.length - 1; i >= 0; i--) {
-        if (typeof slots[i] === "number") { lastOnline = slots[i] >= 0; lastCount = slots[i] >= 0 ? slots[i] : 0; break; }
+        if (typeof slots[i] === "number") {
+          if (nowMin - i <= 10) { lastOnline = slots[i] >= 0; lastCount = slots[i] >= 0 ? slots[i] : 0; }
+          break;
+        }
       }
     }
   }
@@ -2274,10 +2402,15 @@ async function loadCommunity(force) {
   $("#comm-pulse-text").textContent = p.text;
   $("#comm-pulse-sub").textContent = p.sub;
 
-  // Héros du jour + Moments (nécessitent l'historique)
+  // Pseudo du joueur courant (pour « toi » dans les classements et sa part dans les défis)
+  const me = (res && res.me) || currentMe || null;
+  if (res && res.me) currentMe = res.me;
+
+  // Héros du jour + Moments + Titres (nécessitent l'historique) — metrics calculés UNE fois
   const card = $("#comm-hero-card");
+  let metrics = null;
   if (data && data.seen && Object.keys(data.seen).length) {
-    const metrics = computePlayerMetrics(data);
+    metrics = computePlayerMetrics(data);
     const hero = pickHeroOfDay(metrics);
     if (hero) {
       card.hidden = false;
@@ -2297,9 +2430,9 @@ async function loadCommunity(force) {
   }
   renderCommunityRecords(data);
   renderCollective(data);
-  renderChallenges(res && res.challenges ? res.challenges : null, data);
-  renderHallOfFame(data);
-  renderCommunityMc(data);
+  renderChallenges(res && res.challenges ? res.challenges : null, data, me);
+  renderHallOfFame(data, metrics);
+  renderCommunityMc(data, me);
   renderStreaks(data);
   renderDuos(data);
 }

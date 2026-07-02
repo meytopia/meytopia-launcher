@@ -1401,6 +1401,22 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-challenge-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 999px; transition: width .4s ease; }
 .comm-challenge.done .comm-challenge-fill { background: var(--success); }
 .comm-challenge-reward { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
+.comm-challenge-mine { color: var(--accent-hover); font-size: 12px; margin-top: 6px; font-weight: 600; }
+/* Étiquette de période des titres de bloc (« depuis le début de Meytopia ») */
+.comm-period { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
+/* Prochain jalon collectif : teaser de progression (réutilise la barre des défis) */
+.comm-next-milestone { background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+/* La semaine du serveur : 7 mini-barres (pic de joueurs par jour) */
+.comm-week { display: flex; align-items: flex-end; gap: 8px; margin-top: 14px; }
+.comm-week-title { color: var(--text-dim); font-size: 12px; font-weight: 600; margin-right: 4px; align-self: center; }
+.comm-week-day { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.comm-week-bar { width: 18px; height: 42px; background: var(--surface-high); border-radius: 5px; overflow: hidden; display: flex; align-items: flex-end; }
+.comm-week-fill { width: 100%; background: linear-gradient(180deg, var(--accent-hover), var(--accent)); border-radius: 5px 5px 0 0; transition: height .4s ease; }
+.comm-week-day.today .comm-week-bar { outline: 1px solid var(--accent-hover); }
+.comm-week-lbl { color: var(--text-dim); font-size: 10px; text-transform: uppercase; }
+/* Ligne « toi » dans les classements communauté (même langage visuel que Mes stats) */
+.comm-rank.is-me { background: var(--accent-soft); border-radius: 6px; padding-left: 4px; padding-right: 4px; }
+.comm-rank-name .me-tag { color: var(--accent-hover); font-size: 11px; margin-left: 6px; }
 .mystats-sep { margin-top: 6px; border-top: 2px dashed var(--border-strong); }
 .mystats-privacy { margin: 8px 0 4px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-dim); }
 .mystats-privacy code { background: var(--surface-high); padding: 1px 6px; border-radius: 4px; color: var(--text); font-size: 12px; }

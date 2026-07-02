@@ -247,13 +247,7 @@
               <div class="comm-pulse-sub" id="comm-pulse-sub"></div>
             </div>
           </div>
-          <!-- Records du serveur -->
-          <div id="comm-records"></div>
-          <!-- Le serveur en chiffres (collectif + jalons) -->
-          <div id="comm-collective"></div>
-          <!-- Défis communautaires -->
-          <div id="comm-challenges"></div>
-          <!-- Qui joue maintenant (temps réel, live.json) -->
+          <!-- Qui joue maintenant (temps réel, live.json) — juste sous le pouls : c'est le présent -->
           <div class="comm-live" id="comm-live" hidden>
             <div class="comm-live-head">
               <span class="comm-live-title">🟢 Qui joue maintenant</span>
@@ -261,23 +255,30 @@
             </div>
             <div class="comm-live-list" id="comm-live-list"></div>
           </div>
-          <!-- Héros du jour -->
+          <!-- Défis communautaires (objectifs en cours = motivation) -->
+          <div id="comm-challenges"></div>
+          <!-- Le titre du jour (rotation quotidienne, métriques de la saison) -->
           <div class="comm-hero-card" id="comm-hero-card">
-            <div class="comm-hero-label">🌟 À l'honneur aujourd'hui</div>
+            <div class="comm-hero-label">🌟 Le titre du jour</div>
             <div class="comm-hero-name" id="comm-hero-name">—</div>
             <div class="comm-hero-title" id="comm-hero-title"></div>
             <div class="comm-hero-detail" id="comm-hero-detail"></div>
           </div>
-          <!-- Hall of Fame -->
+          <!-- Records du serveur (saison) -->
+          <div id="comm-records"></div>
+          <!-- Le serveur en chiffres (totaux réels + jalons + prochain cap + semaine) -->
+          <div id="comm-collective"></div>
+          <!-- Les titres de la saison -->
           <div id="comm-hof"></div>
-          <!-- Moments -->
-          <div class="comm-moments-title">Les moments du serveur</div>
-          <div id="comm-moments"></div>
+          <!-- Classements en jeu (totaux réels) -->
           <div id="comm-mc"></div>
           <!-- Séries de connexion -->
           <div id="comm-streaks"></div>
           <!-- Meilleurs binômes -->
           <div id="comm-duos"></div>
+          <!-- Moments -->
+          <div class="comm-moments-title">Les moments du serveur</div>
+          <div id="comm-moments"></div>
         </div>
         <div id="community-empty" class="muted" hidden></div>
       </section>
