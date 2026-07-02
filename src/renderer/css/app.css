@@ -1317,6 +1317,8 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
   font-size: 90px; opacity: .06; transform: rotate(15deg);
 }
 .comm-hero-label { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+/* Sous-texte explicatif du titre du jour (rotation quotidienne) */
+.comm-hero-sub { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
 .comm-hero-name { font-size: 26px; font-weight: 800; color: var(--accent-hover); margin: 4px 0 2px; }
 .comm-hero-title { font-size: 15px; font-weight: 600; }
 .comm-hero-detail { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
@@ -1406,6 +1408,8 @@ body[data-page="settings"] { --page-accent: #3B82F6; }
 .comm-period { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
 /* Prochain jalon collectif : teaser de progression (réutilise la barre des défis) */
 .comm-next-milestone { background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+/* Sous-texte du prochain cap : palier automatique, à distinguer des défis de la régie */
+.comm-next-sub { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
 /* La semaine du serveur : 7 mini-barres (pic de joueurs par jour) */
 .comm-week { display: flex; align-items: flex-end; gap: 8px; margin-top: 14px; }
 .comm-week-title { color: var(--text-dim); font-size: 12px; font-weight: 600; margin-right: 4px; align-self: center; }

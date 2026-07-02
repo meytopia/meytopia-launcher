@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('meytopia', {
     list: () => ipcRenderer.invoke('optional:list'),
     install: (id) => ipcRenderer.invoke('optional:install', id),
     uninstall: (id) => ipcRenderer.invoke('optional:uninstall', id),
+    update: (id) => ipcRenderer.invoke('optional:update', id),
   },
   game: {
     play: () => ipcRenderer.invoke('play:start'),

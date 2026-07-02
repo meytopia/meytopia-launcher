@@ -99,7 +99,7 @@
           <span id="maintenance-text"></span>
         </div>
         <div id="offline-banner" class="banner" hidden>
-          Hors ligne — fichiers non vérifiés (mode dégradé)
+          Pas de connexion internet — le jeu se lance avec les fichiers déjà installés, sans vérifier les mises à jour.
         </div>
         <div id="event-banner" class="banner event-banner" hidden>
           <strong id="event-title"></strong>
@@ -114,7 +114,7 @@
           <p class="eyebrow">Serveur communautaire moddé</p>
           <img class="hero-logo" src="assets/logo.png" alt="Meytopia" />
           <p class="hero-greeting" id="hero-greeting"></p>
-          <p class="hero-sub" id="hero-sub">Modpack officiel</p>
+          <p class="hero-sub" id="hero-sub" title="Le modpack = tous les mods officiels du serveur, installés et mis à jour automatiquement par le launcher">Modpack officiel</p>
           <div class="pulse-banner" id="pulse-banner" hidden><span class="pulse-emoji" id="pulse-emoji">🌙</span><span class="pulse-text" id="pulse-text"></span></div>
 
           <button id="btn-play" class="play-btn">
@@ -137,11 +137,11 @@
               <span class="stat-label">Joueurs</span>
               <span class="stat-value num" id="st-players">—&thinsp;/&thinsp;—</span>
             </div>
-            <div class="stat">
+            <div class="stat" title="Version de Minecraft utilisée par le serveur">
               <span class="stat-label">Version</span>
               <span class="stat-value num" id="st-version">—</span>
             </div>
-            <div class="stat">
+            <div class="stat" title="Temps de réponse entre ton PC et le serveur — plus c'est bas, mieux c'est (vert = très bon)">
               <span class="stat-label">Ping</span>
               <span class="stat-value num" id="st-ping">—</span>
             </div>
@@ -170,9 +170,9 @@
         <p class="pack-info" id="pack-info" hidden></p>
         <div class="folder-row">
           <button class="folder-btn" data-dir="mods">Ouvrir mods</button>
-          <button class="folder-btn" data-dir="config">Ouvrir config</button>
-          <button class="folder-btn" data-dir="resourcepacks">Ouvrir resourcepacks</button>
-          <button class="folder-btn" data-dir="shaderpacks">Ouvrir shaderpacks</button>
+          <button class="folder-btn" data-dir="config" title="config = fichiers de réglage des mods">Ouvrir config</button>
+          <button class="folder-btn" data-dir="resourcepacks" title="resourcepacks = textures et sons">Ouvrir resourcepacks</button>
+          <button class="folder-btn" data-dir="shaderpacks" title="shaderpacks = effets visuels (ombres, lumière)">Ouvrir shaderpacks</button>
           <button class="folder-btn" data-dir="screenshots">Ouvrir captures d'écran</button>
         </div>
 
@@ -236,6 +236,7 @@
         <header class="page-head">
           <h2>Communauté</h2>
           <button id="community-refresh" class="ghost-btn small" aria-label="Actualiser la communauté">↻ Actualiser</button>
+          <p class="page-desc">Une saison = une grande période de jeu ; à chaque nouvelle saison, le monde et les compteurs repartent de zéro.</p>
         </header>
         <div id="community-loading" class="muted">Chargement de la vie du serveur…</div>
         <div id="community-content" hidden>
@@ -260,6 +261,7 @@
           <!-- Le titre du jour (rotation quotidienne, métriques de la saison) -->
           <div class="comm-hero-card" id="comm-hero-card">
             <div class="comm-hero-label">🌟 Le titre du jour</div>
+            <div class="comm-hero-sub">Un joueur mis à l'honneur chaque jour, d'après les stats de la saison — la catégorie change tous les jours.</div>
             <div class="comm-hero-name" id="comm-hero-name">—</div>
             <div class="comm-hero-title" id="comm-hero-title"></div>
             <div class="comm-hero-detail" id="comm-hero-detail"></div>
@@ -291,6 +293,7 @@
             <button id="mystats-share" class="ghost-btn small" hidden aria-label="Partager mon profil">🔗 Partager mon profil</button>
             <button id="mystats-refresh" class="ghost-btn small" aria-label="Actualiser mes stats">↻ Actualiser</button>
           </div>
+          <p class="page-desc">Une saison = une grande période de jeu ; à chaque nouvelle saison, le monde et les compteurs repartent de zéro.</p>
         </header>
         <div id="mystats-loading" class="muted">Chargement de tes statistiques…</div>
         <div id="mystats-content" hidden>
@@ -302,8 +305,8 @@
             <div class="mystats-card"><div class="mystats-num" id="mystats-time">—</div><div class="mystats-lab">temps de jeu (saison)</div></div>
             <div class="mystats-card"><div class="mystats-num" id="mystats-total">—</div><div class="mystats-lab">temps de jeu total</div></div>
             <div class="mystats-card"><div class="mystats-num" id="mystats-days">—</div><div class="mystats-lab">jours de connexion</div></div>
-            <div class="mystats-card"><div class="mystats-num" id="mystats-rank">—</div><div class="mystats-lab">classement assiduité</div></div>
-            <div class="mystats-card"><div class="mystats-num" id="mystats-first">—</div><div class="mystats-lab">première connexion</div></div>
+            <div class="mystats-card"><div class="mystats-num" id="mystats-rank">—</div><div class="mystats-lab">ta place au temps de jeu (saison)</div></div>
+            <div class="mystats-card"><div class="mystats-num" id="mystats-first">—</div><div class="mystats-lab">première connexion (cette saison)</div></div>
           </div>
           <div id="mystats-badges" class="mystats-badges"></div>
           <div id="mystats-privacy" class="mystats-privacy"></div>
@@ -311,7 +314,7 @@
           <div id="mystats-social"></div>
           <div id="mystats-compare"></div>
           <div class="mystats-board">
-            <div class="mystats-board-title">🏆 Top joueurs les plus assidus</div>
+            <div class="mystats-board-title">🏆 Top joueurs — temps de jeu cette saison</div>
             <div id="mystats-leaderboard"></div>
           </div>
         </div>
@@ -406,10 +409,14 @@
               <span class="setting-name">Dossier des données</span>
               <span class="setting-hint num" id="data-dir-path">…</span>
             </div>
-            <div class="btn-group">
-              <button class="ghost-btn" id="btn-migrate">Modifier</button>
-              <button class="ghost-btn" id="btn-fullcheck">Vérification complète</button>
+            <button class="ghost-btn" id="btn-migrate" title="Déplace tous les fichiers du jeu vers un autre dossier — la copie peut prendre du temps">Déplacer…</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-meta">
+              <span class="setting-name">Vérification complète</span>
+              <span class="setting-hint">Contrôle tous les fichiers du jeu et retélécharge seulement ce qui manque ou est abîmé — tes ajouts persos ne sont pas touchés</span>
             </div>
+            <button class="ghost-btn" id="btn-fullcheck">Vérification complète</button>
           </div>
         </div>
 
@@ -457,7 +464,7 @@
           <div class="setting-row">
             <div class="setting-meta">
               <span class="setting-name">Canal bêta</span>
-              <span class="setting-hint">Reçois les versions de test (X.Y.Z-beta.N) avant tout le monde — réservé aux aventuriers</span>
+              <span class="setting-hint">Reçois les versions de test avant tout le monde (elles peuvent contenir des bugs) — réservé aux aventuriers</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="beta-toggle" />

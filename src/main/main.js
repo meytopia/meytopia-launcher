@@ -362,31 +362,59 @@ ipcMain.handle('blocklist:delete', (_e, paths) => {
 });
 
 /* ── IPC : catalogue optionnel (CDC F11) ───────────────────── */
+// Sérialisation des actions catalogue : le renderer ne gèle QUE la ligne cliquée, donc le joueur
+// peut lancer « Mettre à jour » sur A puis « Installer/Désinstaller » sur B pendant le téléchargement.
+// Or downloads.run partage un état global (state.interrupted : une file B en échec ferait échouer A
+// à tort) et une désinstallation de bibliothèque pendant la MAJ d'un mod qui en dépend laisserait le
+// mod sans sa lib (NeoForge refuse de démarrer). Une seule action catalogue à la fois, en file.
+let optionalChain = Promise.resolve();
+function serializeOptional(fn) {
+  const run = optionalChain.then(fn, fn);
+  optionalChain = run.catch(() => {}); // une action en échec ne bloque pas les suivantes
+  return run;
+}
 ipcMain.handle('optional:list', async () => {
   const { data } = await remote.getOptional();
   const items = data?.items ?? [];
   const tracked = content.readTracked();
   const installed = {};
+  const updates = {}; // id → true si le joueur a une ANCIENNE version (le catalogue pointe un autre fichier)
   for (const item of items) {
-    installed[item.id] = tracked.some(
+    const entry = tracked.find(
       (t) => t.source === `optional:${item.id}` && fs.existsSync(path.join(getGameDir(), t.path)),
     );
+    installed[item.id] = Boolean(entry);
+    updates[item.id] = Boolean(entry) && Boolean(item.file?.path) && entry.path !== item.file.path;
   }
-  return { items, installed };
+  return { items, installed, updates };
 });
-ipcMain.handle('optional:install', async (_e, id) => {
+ipcMain.handle('optional:update', (_e, id) => serializeOptional(async () => {
+  // Jeu en cours : la JVM verrouille les jars chargés (Windows) — la suppression de l'ancienne version
+  // échouerait et laisserait deux versions du même mod. On refuse proprement (chaîne, pas objet :
+  // le renderer teste ce retour et un objet serait « truthy »).
+  if (game.isRunning()) return 'game-running';
+  const { data } = await remote.getOptional();
+  const items = data?.items ?? [];
+  const item = items.find((i) => i.id === id);
+  if (!item) return false;
+  return content.updateOptional(item, items); // télécharge le nouveau AVANT de retirer l'ancien
+}));
+ipcMain.handle('optional:install', (_e, id) => serializeOptional(async () => {
   const { data } = await remote.getOptional();
   const items = data?.items ?? [];
   const item = items.find((i) => i.id === id);
   if (!item) return false;
   return content.installOptional(item, items); // installe aussi les dépendances (bibliothèques)
-});
-ipcMain.handle('optional:uninstall', async (_e, id) => {
+}));
+ipcMain.handle('optional:uninstall', (_e, id) => serializeOptional(async () => {
+  // Même garde que optional:update : jeu en cours = jar verrouillé par la JVM (Windows),
+  // fs.rmSync lèverait EPERM et l'invoke rejetterait côté renderer (ligne gelée sans message).
+  if (game.isRunning()) return 'game-running';
   const { data } = await remote.getOptional();
   const items = data?.items ?? [];
   const item = items.find((i) => i.id === id);
   if (item) content.uninstallOptional(item, items); // gère la cascade lib ↔ mods
-});
+}));
 
 /* ── IPC : jeu, synchro, téléchargements ───────────────────── */
 ipcMain.handle('play:start', () => game.play());

@@ -171,7 +171,7 @@ function refreshPlayButton() {
   } else if (maint?.active && maint?.blockPlay !== false) {
     set("Maintenance", maint.message || "Le serveur est en maintenance", false);
   } else if (ui.remoteOffline && !ui.remoteConfig) {
-    set("Hors ligne", "Impossible de joindre la configuration", false);
+    set("Hors ligne", "Pas de connexion : impossible de récupérer les infos du serveur — vérifie ta connexion internet puis réessaie", false);
   } else if (!activeAccount) {
     set("Jouer", "Connectez un compte", true);
     btn.dataset.action = "go-settings";
@@ -184,7 +184,7 @@ function refreshPlayButton() {
     set("Réessayer", "⚠ " + ui.launchError, true);
     btn.dataset.action = "play";
   } else {
-    set("Jouer", ui.offlinePlay ? "Hors ligne — fichiers non vérifiés" : "Prêt", true);
+    set("Jouer", ui.offlinePlay ? "Pas de connexion — le jeu se lance avec les fichiers déjà installés" : "Prêt", true);
     btn.dataset.action = "play";
   }
 }
@@ -340,7 +340,7 @@ function renderStatus(status) {
     renderPlayerChips(list, status.players);
   } else {
     toggle.disabled = true;
-    toggle.textContent = status.online ? "Liste des joueurs indisponible (query désactivé)" : "Voir les joueurs connectés";
+    toggle.textContent = status.online ? "Le serveur ne partage pas la liste des joueurs pour le moment — ça ne t'empêche pas de jouer" : "Voir les joueurs connectés";
     list.hidden = true;
     playersVisible = false;
   }
@@ -522,18 +522,19 @@ $$(".folder-btn[data-dir]").forEach((btn) =>
   btn.addEventListener("click", () => api.content.openFolder(btn.dataset.dir))
 );
 
-const SOURCE_LABELS = { user: "perso", detected: "détecté" };
+const SOURCE_LABELS = { user: "perso", detected: "ajouté hors launcher" };
 const TYPE_LABELS = { mod: "mod", resourcepack: "resourcepack", shaderpack: "shaderpack", config: "config" };
 
 async function loadContent() {
   // Catalogue approuvé
-  const { items, installed } = await api.optional.list();
+  const { items, installed, updates } = await api.optional.list();
   const optWrap = $("#optional-list");
   optWrap.textContent = "";
   if (!items.length) {
     optWrap.innerHTML = `<div class="empty small"><p>Aucun contenu approuvé pour le moment.</p></div>`;
   } else {
     for (const item of items) {
+      const hasUpdate = Boolean(updates && updates[item.id]); // installé, mais le catalogue pointe une version plus récente
       const row = document.createElement("div");
       row.className = "list-row";
       row.innerHTML = `
@@ -541,15 +542,37 @@ async function loadContent() {
           <span class="row-name">${escapeHtml(item.name)}</span>
           <span class="row-sub">${escapeHtml(item.description ?? "")}</span>
         </div>
-        <span class="row-badge">${item.lib ? "bibliothèque" : escapeHtml(TYPE_LABELS[item.type] ?? item.type)}</span>`;
+        <span class="row-badge${hasUpdate ? " warn" : ""}"${item.lib ? ' title="Ne change rien en jeu, mais d\'autres contenus en ont besoin pour fonctionner"' : ""}>${item.lib ? "fichier technique" : escapeHtml(TYPE_LABELS[item.type] ?? item.type)}${hasUpdate ? " · mise à jour disponible" : ""}</span>`;
+      // Pendant une action, on gèle TOUTE la ligne : « Désinstaller » cliqué pendant une MAJ en vol
+      // (ou l'inverse) créerait une course fichier/suivi aux résultats incohérents.
+      const freezeRow = () => row.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+      if (hasUpdate) {
+        const updBtn = document.createElement("button");
+        updBtn.className = "ghost-btn small";
+        updBtn.textContent = "Mettre à jour";
+        updBtn.addEventListener("click", async () => {
+          freezeRow();
+          // .catch : même sur une erreur imprévue de l'IPC, la ligne se dégèle et un message s'affiche.
+          const ok = await api.optional.update(item.id).catch(() => false);
+          if (ok === "game-running") toast(`Ferme d'abord Minecraft avant de mettre à jour ${item.name}.`);
+          else if (!ok) toast(`Échec de la mise à jour de ${item.name} — l'ancienne version reste en place.`);
+          loadContent();
+        });
+        row.appendChild(updBtn);
+      }
       const btn = document.createElement("button");
       btn.className = `ghost-btn small${installed[item.id] ? " danger" : ""}`;
       btn.textContent = installed[item.id] ? "Désinstaller" : "Installer";
       btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        if (installed[item.id]) await api.optional.uninstall(item.id);
-        else {
-          const ok = await api.optional.install(item.id);
+        freezeRow();
+        if (installed[item.id]) {
+          // .catch : même sur une erreur imprévue (jar verrouillé, exception IPC), la ligne se dégèle.
+          const res = await api.optional.uninstall(item.id).catch(() => "error");
+          if (res === "game-running") toast(`Ferme d'abord Minecraft avant de désinstaller ${item.name}.`);
+          else if (res === "error") toast(`Échec de la désinstallation de ${item.name}.`);
+        } else {
+          // .catch : même sur une erreur imprévue de l'IPC, la ligne se dégèle et un message s'affiche.
+          const ok = await api.optional.install(item.id).catch(() => false);
           if (!ok) toast(`Échec du téléchargement de ${item.name}.`);
         }
         loadContent();
@@ -574,7 +597,7 @@ async function loadContent() {
     el.innerHTML = `
       <div class="row-main">
         <span class="row-name">${escapeHtml(row.name)}</span>
-        <span class="row-sub">${escapeHtml(TYPE_LABELS[row.type] ?? row.type)} · ${escapeHtml(sourceLabel)}${row.blocked ? ` · <strong>bloqué : ${escapeHtml(row.reason ?? "")}</strong>` : ""}</span>
+        <span class="row-sub"${row.source === "detected" ? ' title="Fichier trouvé dans ton dossier de jeu, installé sans passer par le launcher — tu peux le garder ou le supprimer"' : ""}>${escapeHtml(TYPE_LABELS[row.type] ?? row.type)} · ${escapeHtml(sourceLabel)}${row.blocked ? ` · <strong>bloqué : ${escapeHtml(row.reason ?? "")}</strong>` : ""}</span>
       </div>`;
     const removeBtn = document.createElement("button");
     removeBtn.className = "ghost-btn small danger";
@@ -812,6 +835,9 @@ function renderAccounts(list) {
   $("#account-hint").textContent = activeAny
     ? (activeAny.needsRelogin ? "Reconnexion requise" : "Compte actif")
     : (list.length ? "Aucun compte actif" : "Aucun compte");
+  $("#account-hint").title = activeAny && activeAny.needsRelogin
+    ? "Ta session Microsoft a expiré — retire ce compte puis ajoute-le à nouveau pour te reconnecter"
+    : "";
   setMcAvatar($("#account-avatar"), activeAny);
 
   const wrap = $("#accounts-list");
@@ -835,6 +861,7 @@ function renderAccounts(list) {
       const badge = document.createElement("span");
       badge.className = "row-badge warn";
       badge.textContent = "Reconnexion requise";
+      badge.title = "Ta session Microsoft a expiré — retire ce compte puis ajoute-le à nouveau pour te reconnecter";
       meta.appendChild(badge);
     } else if (account.active) {
       const badge = document.createElement("span");
@@ -1122,10 +1149,12 @@ function renderUpdateLine() {
     btn.disabled = false;
     btn.dataset.ready = "1";
     btn.textContent = "Redémarrer pour installer";
+    btn.title = "";
   } else {
     btn.disabled = true; // vérification automatique chaque minute : le bouton devient un témoin
     btn.dataset.ready = "";
-    btn.textContent = u.state === "dev" ? "Indisponible (dev)" : "Automatique — 1 min";
+    btn.textContent = u.state === "dev" ? "Indisponible (dev)" : "Vérification automatique (chaque minute)";
+    btn.title = u.state === "dev" ? "" : "Le launcher vérifie tout seul les mises à jour — rien à faire ; le bouton s'active quand une mise à jour est prête";
   }
 }
 
@@ -1253,7 +1282,7 @@ async function loadPackInfo() {
   if (!el) return;
   const info = await api.app.packInfo();
   if (!info) { el.hidden = true; return; }
-  el.textContent = `Modpack ${info.version} · ${info.count} fichiers · ${fmtBytes(info.totalBytes)}`;
+  el.textContent = `Pack officiel installé : version ${info.version} · ${info.count} fichiers · ${fmtBytes(info.totalBytes)}`;
   el.hidden = false;
 }
 
@@ -1494,7 +1523,7 @@ async function loadMyStats(force) {
   $("#mystats-time").textContent = fmtPlayTime(meEntry.minutes);
   $("#mystats-total").textContent = meEntry.totalMin ? fmtPlayTime(meEntry.totalMin) : "—";
   $("#mystats-days").textContent = String(dayCount);
-  $("#mystats-rank").textContent = rank ? "#" + rank : "—";
+  $("#mystats-rank").textContent = rank ? `n°${rank} sur ${ranked.length}` : "—";
   $("#mystats-first").textContent = fmtShortDate(meEntry.first);
 
   // Jalons
@@ -1517,10 +1546,11 @@ async function loadMyStats(force) {
   const ig = $("#mystats-ingame");
   if (ig) {
     const cards = [];
-    const add = (emo, val, lab, pctKey, pctRaw) => {
+    const add = (emo, val, lab, pctKey, pctRaw, tip) => {
       if (val != null && val !== 0) {
-        const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null; // étiquette complète (« n°1 sur 3 » ou « top 12% »)
-        cards.push(`<div class="mystats-card"><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct">${escapeHtml(pct)}</span>` : ""}</div></div>`);
+        const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null; // étiquette complète (« n°1 sur 3 » ou « parmi les 12 % meilleurs »)
+        // tip et le title du rang sont des textes STATIQUES (français en dur) — jamais de données joueur.
+        cards.push(`<div class="mystats-card"${tip ? ` title="${tip}"` : ""}><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct" title="Ta place parmi tous les joueurs de Meytopia pour cette statistique">${escapeHtml(pct)}</span>` : ""}</div></div>`);
       }
     };
     if (mc) {
@@ -1533,10 +1563,11 @@ async function loadMyStats(force) {
       add("🎣", mc.fishCaught, "poissons", "fishCaught", mc.fishCaught);
       add("🏆", mc.adv, "succès", "adv", mc.adv);
       add("🗡", mc.playerKills, "duels gagnés", "playerKills", mc.playerKills);
-      if (typeof mc.noDeathMin === "number" && mc.noDeathMin > 0) add("🛡️", fmtPlayTime(mc.noDeathMin), "sans mourir");
+      if (typeof mc.noDeathMin === "number" && mc.noDeathMin > 0) add("🛡️", fmtPlayTime(mc.noDeathMin), "sans mourir", null, null, "Temps de jeu écoulé depuis la dernière mort — le compteur repart à zéro quand on meurt");
       add("🦘", mc.jumps, "sauts");
     }
-    ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu</div><div class="mystats-cards">${cards.join("")}</div>` : "";
+    // Même formule de période que la page Communauté : les compteurs mc.* sont des totaux réels.
+    ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu<span class="comm-period">depuis le début de Meytopia</span></div><div class="mystats-cards">${cards.join("")}</div>` : "";
   }
 
   const myPriv = !!(res.data.priv && meEntry.uuid && res.data.priv[meEntry.uuid] === true);
@@ -1845,13 +1876,12 @@ function aggChallenge(data, metric) {
   const pub = pubEntries(data).map(([, s]) => s); // repli (anciennes données sans agg) : exclut les joueurs privés
   const sumMc = (k) => pub.reduce((a, s) => a + ((s.mc && typeof s.mc[k] === "number") ? s.mc[k] : 0), 0);
   switch (metric) {
-    case "mobKills": return sumMc("mobKills");
-    case "diamonds": return sumMc("diamonds");
-    case "fishCaught": return sumMc("fishCaught");
     case "totalPlayMinutes": return pub.reduce((a, s) => a + (s.minutes || 0), 0);
     case "uniquePlayers": return pub.length;
     case "peak": return (data && data.records && data.records.peakPlayers && data.records.peakPlayers.value) || 0;
-    default: return 0;
+    // toute autre métrique = somme de seen[].mc[metric] — même règle générique que le mod (aggMetric),
+    // donc les nouvelles métriques de défis (distTotM, adv, elytraM, playerKills…) marchent sans MAJ ici.
+    default: return sumMc(metric);
   }
 }
 // Contribution personnelle du joueur courant à un défi (même famille de source que le repli d'aggChallenge).
@@ -1871,7 +1901,11 @@ function renderChallenges(challenges, data, me) {
     && (!c.from || new Date(c.from).getTime() <= now)
     && (!c.to || new Date(c.to).getTime() >= now));
   if (!active.length) { box.innerHTML = ""; return; }
-  const fmtV = (metric, v) => metric === "totalPlayMinutes" ? fmtPlayTime(v) : String(v);
+  const fmtV = (metric, v) => {
+    if (metric === "totalPlayMinutes") return fmtPlayTime(v);
+    if (metric === "distTotM" || metric === "elytraM") return v >= 1000 ? fmtKm(v) : v + " m";
+    return String(v);
+  };
   box.innerHTML = `<div class="comm-moments-title">🎯 Défis communautaires</div>` + active.map((c) => {
     const cur = aggChallenge(data, c.metric);
     const pct = Math.max(0, Math.min(100, Math.round(cur / c.target * 100)));
@@ -1942,7 +1976,7 @@ function weekActivityHtml(data) {
     items.push({ k, pk, lbl, isToday: k === today });
   }
   if (!maxPeak) return "";
-  return `<div class="comm-week"><span class="comm-week-title">📈 La semaine</span>`
+  return `<div class="comm-week"><span class="comm-week-title">📈 La semaine — record de joueurs en même temps, jour par jour</span>`
     + items.map((d) => `<div class="comm-week-day${d.isToday ? " today" : ""}" title="${escapeHtml(d.k)} — pic ${d.pk}">`
       + `<div class="comm-week-bar"><div class="comm-week-fill" data-h="${d.pk ? Math.max(6, Math.round(d.pk / maxPeak * 100)) : 0}"></div></div>`
       + `<span class="comm-week-lbl">${escapeHtml(d.lbl)}</span></div>`).join("")
@@ -1969,7 +2003,8 @@ function renderCollective(data) {
     // Prochain cap : la communauté voit où elle va (barre de progression).
     + (ms.next ? `<div class="comm-next-milestone"><div class="comm-challenge-head"><span>Prochain cap : ${escapeHtml(ms.next.label)}</span>`
       + `<span class="comm-challenge-num">${ms.next.pct}%</span></div>`
-      + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${ms.next.pct}"></div></div></div>` : "")
+      + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${ms.next.pct}"></div></div>`
+      + `<div class="comm-next-sub">Palier symbolique franchi tous ensemble — il se coche tout seul, rien à faire.</div></div>` : "")
     + weekActivityHtml(data);
   box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
   box.querySelectorAll(".comm-week-fill").forEach((el) => { el.style.height = (Number(el.dataset.h) || 0) + "%"; }); // plancher géré à la génération (0 = jour vide, barre vide)
@@ -2086,7 +2121,7 @@ function percentileOf(data, key, myVal) {
   if (vals.length < 3) return null;
   const rank = vals.filter((v) => v > myVal).length + 1;
   if (vals.length < 10) return `n°${rank} sur ${vals.length}`;
-  return "top " + Math.max(1, Math.round((rank / vals.length) * 100)) + "%";
+  return "parmi les " + Math.max(1, Math.round((rank / vals.length) * 100)) + " % meilleurs du serveur";
 }
 function myTopPartner(data, me) {
   const d = computeDuos(data).find((x) => x.a === me || x.b === me);
@@ -2122,7 +2157,7 @@ function renderCommunityRecords(data) {
   // (le « temps de jeu cumulé » n'est pas un record : il vit dans « Le serveur en chiffres », pas ici)
   const cards = [
     { e: "👥", v: String(peakVal), l: peakVal > 1 ? "joueurs en simultané" : "joueur en simultané", sub: "record" + (peakWhen ? " · " + peakWhen : "") },
-    { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs uniques" : "joueur unique" },
+    { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs différents venus cette saison" : "joueur venu cette saison" },
   ];
   if (rec.longestSession && typeof rec.longestSession.minutes === "number" && rec.longestSession.minutes > 0) {
     cards.push({ e: "🏃", v: fmtPlayTime(rec.longestSession.minutes), l: "plus longue session", sub: rec.longestSession.player ? "par " + rec.longestSession.player : "" });
@@ -2150,7 +2185,7 @@ function renderCommunityMc(data, me) {
     { key: "distTotM", alt: "distM", label: "🥾 Distance parcourue", fmt: (v) => v >= 1000 ? fmtKm(v) : v + " m" },
     { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => v + " minerais" },
     { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => v + " poissons" },
-    { key: "noDeathMin", label: "🛡️ Série sans mourir", fmt: (v) => fmtPlayTime(v) },
+    { key: "noDeathMin", label: "🛡️ Série sans mourir", tip: "Temps de jeu écoulé depuis la dernière mort — le compteur repart à zéro quand on meurt", fmt: (v) => fmtPlayTime(v) },
     { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
   ];
   let any = false;
@@ -2174,7 +2209,7 @@ function renderCommunityMc(data, me) {
       const myIdx = ranked.findIndex((r) => r.name === me);
       if (myIdx >= 3) rows += row(ranked[myIdx], myIdx, m);
     }
-    return `<div class="comm-board"><div class="comm-board-title">${m.label}</div>${rows}</div>`;
+    return `<div class="comm-board"><div class="comm-board-title"${m.tip ? ` title="${m.tip}"` : ""}>${m.label}</div>${rows}</div>`;
   }).join("");
   box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu<span class="comm-period">depuis le début de Meytopia</span></div><div class="comm-boards">${cols}</div>` : "";
   box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
@@ -2318,9 +2353,13 @@ function renderLivePanel(live) {
   box.hidden = false;
   const players = Array.isArray(live.players) ? live.players : [];
   const count = typeof live.count === "number" ? live.count : players.length;
+  // « TPS » (indicateur d'admin) traduit en mots de tous les jours : fluide dès 19, sinon ça rame.
   $("#comm-live-meta").textContent = live.online
-    ? `${count} en ligne` + (typeof live.tps === "number" ? ` · ${live.tps.toFixed(1)} TPS` : "")
+    ? `${count} en ligne` + (typeof live.tps === "number" ? (live.tps >= 19 ? " · serveur fluide" : " · le serveur rame un peu") : "")
     : "serveur hors ligne";
+  $("#comm-live-meta").title = typeof live.tps === "number" && live.online
+    ? "Vitesse du serveur : 20 = parfaitement fluide"
+    : "";
   const list = $("#comm-live-list");
   list.textContent = "";
   if (live.online && players.length) {

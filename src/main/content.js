@@ -202,6 +202,17 @@ async function installOptional(item, allItems) {
 }
 
 /**
+ * Supprime TOUTES les versions installées d'une entrée du catalogue, par les chemins SUIVIS
+ * (local-content.json) — pas par le chemin du catalogue actuel : si le joueur a une ANCIENNE
+ * version (le catalogue a été mis à jour depuis), c'est bien son fichier à lui qu'il faut retirer.
+ */
+function removeOptionalById(id, fallbackPath) {
+  const mine = readTracked().filter((t) => t.source === `optional:${id}`);
+  if (!mine.length && fallbackPath) { removeContent(fallbackPath); return; }
+  for (const t of mine) removeContent(t.path);
+}
+
+/**
  * Désinstalle un contenu du catalogue, dépendances comprises.
  * - Bibliothèque : retire AUSSI les mods installés qui en dépendent.
  * - Mod : retire ses bibliothèques devenues inutiles (plus aucun mod installé ne les utilise).
@@ -211,18 +222,58 @@ function uninstallOptional(item, allItems) {
   const byId = new Map(allItems.map((i) => [i.id, i]));
   if (item.lib) {
     for (const m of allItems) {
-      if (m.id !== item.id && (m.deps || []).includes(item.id) && isOptionalInstalled(m.id)) removeContent(m.file.path);
+      if (m.id !== item.id && (m.deps || []).includes(item.id) && isOptionalInstalled(m.id)) removeOptionalById(m.id, m.file.path);
     }
-    removeContent(item.file.path);
+    removeOptionalById(item.id, item.file.path);
     return;
   }
-  removeContent(item.file.path);
+  removeOptionalById(item.id, item.file.path);
   for (const depId of (item.deps || [])) {
     const dep = byId.get(depId);
     if (!dep || !dep.lib) continue;
     const stillUsed = allItems.some((m) => m.id !== item.id && (m.deps || []).includes(depId) && isOptionalInstalled(m.id));
-    if (!stillUsed && isOptionalInstalled(depId)) removeContent(dep.file.path);
+    if (!stillUsed && isOptionalInstalled(depId)) removeOptionalById(depId, dep.file.path);
   }
+}
+
+/**
+ * Met à jour un contenu installé vers la version actuelle du catalogue :
+ * télécharge le NOUVEAU fichier d'abord (SHA-1 vérifié), puis supprime les anciennes versions
+ * suivies — jamais de trou : en cas d'échec du téléchargement, l'ancienne version reste en place.
+ * Et JAMAIS de doublon : si la file échoue à moitié (ex. une dépendance en erreur) alors que le
+ * nouveau jar a déjà été écrit, on retire le NOUVEAU — deux versions du même mod dans mods/
+ * feraient refuser le démarrage à NeoForge (duplicate mod id).
+ */
+async function updateOptional(item, allItems, _seen) {
+  allItems = Array.isArray(allItems) ? allItems : [item];
+  _seen = _seen || new Set();
+  if (_seen.has(item.id)) return true; // anti-cycle (deps déclarées à la main en régie)
+  _seen.add(item.id);
+  // Dépendances PÉRIMÉES d'abord : mettre à jour le mod en gardant une vieille bibliothèque casserait la
+  // compatibilité (installOptional saute les deps « déjà installées », même en ancienne version).
+  const byId = new Map(allItems.map((i) => [i.id, i]));
+  for (const depId of (item.deps || [])) {
+    const dep = byId.get(depId);
+    if (!dep || !dep.file?.path) continue;
+    const depOld = readTracked().some((t) => t.source === `optional:${depId}` && t.path !== dep.file.path
+      && fs.existsSync(path.join(getGameDir(), t.path)));
+    if (depOld && !(await updateOptional(dep, allItems, _seen))) return false; // lib en échec → on ne touche pas au mod
+  }
+  const old = readTracked().filter((t) => t.source === `optional:${item.id}` && t.path !== item.file?.path);
+  const ok = await installOptional(item, allItems);
+  if (ok) {
+    // Si l'ancien jar est verrouillé (jeu/antivirus), on retire le NOUVEAU (jamais de duplicate mod id).
+    try { for (const t of old) removeContent(t.path); return true; }
+    catch (e) {
+      try { if (item.file?.path) removeContent(item.file.path); } catch (_) { /* au pire : l'échec est signalé */ }
+      return false;
+    }
+  }
+  const oldStillHere = old.some((t) => fs.existsSync(path.join(getGameDir(), t.path)));
+  if (oldStillHere && item.file?.path && fs.existsSync(safeGamePath(item.file.path))) {
+    removeContent(item.file.path); // rollback du nouveau : l'ancienne version reste la seule en place
+  }
+  return false;
 }
 
 module.exports = {
@@ -235,4 +286,5 @@ module.exports = {
   removeContent,
   installOptional,
   uninstallOptional,
+  updateOptional,
 };
