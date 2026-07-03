@@ -30,6 +30,15 @@ jobs:
 
       - run: npm ci
 
+      # Filet anti-regression AVANT le build : plus aucun installeur ne peut partir chez les
+      # joueurs avec une casse deja detectable (le workflow Tests ne tourne que sur main, pas sur les tags).
+      - name: Tests (bloquants avant publication)
+        shell: bash # bash = arret a la PREMIERE erreur (pwsh ne propage que la derniere)
+        run: |
+          node -e "new (require('vm').Script)(require('fs').readFileSync('src/renderer/js/app.js','utf8')); console.log('renderer OK')"
+          node -e "new (require('vm').Script)(require('fs').readFileSync('src/main/main.js','utf8')); console.log('main OK')"
+          node tools/launcher-test.js
+
       - name: Build de l'installeur
         # Signature de code AUTOMATIQUE si les secrets CSC_LINK (PFX base64) + CSC_KEY_PASSWORD sont définis ;
         # sinon electron-builder produit un installeur NON signé (le build n'échoue pas). Voir SIGNING.md.
