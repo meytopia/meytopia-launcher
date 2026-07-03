@@ -139,10 +139,15 @@ function launchConfetti() {
 }
 
 /* ── Bouton JOUER : machine à états (CDC F3, F7, F14, F16) ── */
+let reloginPending = false; // fenêtre Microsoft de reconnexion ouverte : le bouton reste neutralisé
 function refreshPlayButton() {
   const label = $("#play-label");
   const state = $("#play-state");
   const btn = $("#btn-play");
+  // Reconnexion en cours : on garde le bouton neutralisé SANS écraser le texte « Reconnexion… » posé
+  // au clic — sinon un événement de fond (auto-updater, retour de focus, tick gate) le réactiverait
+  // en « Reconnecter » cliquable et effacerait l'indicateur (régression corrigée après audit).
+  if (reloginPending) { btn.classList.add("disabled"); btn.dataset.action = ""; return; }
   const set = (l, s, enabled) => {
     label.textContent = l;
     state.textContent = s;
@@ -152,6 +157,9 @@ function refreshPlayButton() {
 
   const maint = ui.remoteConfig?.maintenance;
   const activeAccount = ui.accounts.find((a) => a.active && !a.needsRelogin);
+  // #6 : compte actif mais session Microsoft expirée → message dédié + reconnexion en un clic
+  // (avant, le bouton disait « Connectez un compte » comme si le joueur n'en avait pas).
+  const activeExpired = ui.accounts.find((a) => a.active && a.needsRelogin);
 
   const gate = gateInfo();
   if (gate) {
@@ -172,13 +180,18 @@ function refreshPlayButton() {
     set("Maintenance", maint.message || "Le serveur est en maintenance", false);
   } else if (ui.remoteOffline && !ui.remoteConfig) {
     set("Hors ligne", "Pas de connexion : impossible de récupérer les infos du serveur — vérifie ta connexion internet puis réessaie", false);
-  } else if (!activeAccount) {
-    set("Jouer", "Connectez un compte", true);
-    btn.dataset.action = "go-settings";
   } else if (["checking", "syncing", "launching"].includes(ui.game.state)) {
+    // Une préparation/synchro/lancement en cours prime sur tout état de compte : le bouton reste
+    // neutralisé (sinon la branche « Reconnecter » le réactiverait en pleine synchro — audité).
     set("…", ui.game.text || "Préparation…", false);
   } else if (ui.game.state === "ingame") {
     set("En jeu", "Bon jeu !", false);
+  } else if (activeExpired) {
+    set("Reconnecter", "Ta session Microsoft a expiré — reconnecte-toi en un clic", true);
+    btn.dataset.action = "relogin";
+  } else if (!activeAccount) {
+    set("Jouer", "Connectez un compte", true);
+    btn.dataset.action = "go-settings";
   } else if (ui.launchError) {
     // #9 : trace persistante d'un échec (un toast s'efface et laisse « Prêt », le joueur ne comprend pas).
     set("Réessayer", "⚠ " + ui.launchError, true);
@@ -197,6 +210,19 @@ async function onPlayClick() {
     showPage("settings");
     toast("Ajoute d'abord un compte Microsoft.");
     return;
+  }
+  if (action === "relogin") {
+    // #6 : la fenêtre Microsoft s'ouvre directement pour se reconnecter. reloginPending neutralise le
+    // bouton JOUER pendant toute l'opération (refreshPlayButton court-circuite tant qu'il est vrai) —
+    // pas de double fenêtre, et l'indicateur « Reconnexion… » ne peut plus être effacé par un événement.
+    if (reloginPending || playPending) return;
+    reloginPending = true;
+    $("#play-label").textContent = "Reconnecter";
+    $("#play-state").textContent = "Reconnexion…";
+    $("#btn-play").classList.add("disabled");
+    toast("La fenêtre Microsoft va s'ouvrir pour te reconnecter.");
+    try { return await addAccount(); }
+    finally { reloginPending = false; refreshPlayButton(); }
   }
   if (action !== "play") return;
   if (playPending) return; // un lancement est déjà en préparation
@@ -766,6 +792,18 @@ api.downloads.onUpdate((snapshot) => {
 /* ── Comptes Microsoft (CDC F2) ────────────────────────────── */
 const avatarLetter = (name) => (name || "?").charAt(0).toUpperCase();
 
+// #4 : avatars réseau — place réservée (largeur/hauteur posées : plus de saut de mise en page),
+// chargement paresseux, et carré neutre local si le service d'avatars ne répond pas (au lieu de
+// faire disparaître l'image, ce qui décalait tout). Le data-URI est permis par la CSP (img-src data:).
+const AVATAR_FALLBACK_SRC = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#3a3d4d"/><rect x="2" y="3" width="4" height="2" fill="#4b4f63"/><rect x="2" y="6" width="4" height="1" fill="#2e3140"/></svg>');
+function hardenAvatar(img, size) {
+  if (size) { img.width = size; img.height = size; }
+  img.loading = "lazy";
+  img.decoding = "async";
+  img.addEventListener("error", () => { img.src = AVATAR_FALLBACK_SRC; }, { once: true });
+  return img;
+}
+
 /** Avatar Minecraft : la tête du joueur par-dessus l'initiale (repli automatique hors ligne). */
 function setMcAvatar(el, account) {
   el.textContent = account ? avatarLetter(account.name) : "";
@@ -773,9 +811,12 @@ function setMcAvatar(el, account) {
   const img = document.createElement("img");
   img.className = "avatar-img";
   img.alt = "";
+  img.width = 64; img.height = 64;
+  img.decoding = "async";
   img.src = account.uuid
     ? `https://crafatar.com/avatars/${encodeURIComponent(account.uuid)}?size=64&overlay`
     : `https://mc-heads.net/avatar/${encodeURIComponent(account.name)}/64`;
+  // Ici le repli reste l'initiale du pseudo (déjà affichée derrière) : plus parlant qu'un carré neutre.
   img.addEventListener("error", () => img.remove());
   el.appendChild(img);
 }
@@ -792,8 +833,8 @@ function renderPlayerChips(container, players) {
     chip.className = "player-chip";
     const img = document.createElement("img");
     img.alt = "";
+    hardenAvatar(img, 22);
     img.src = `https://mc-heads.net/avatar/${encodeURIComponent(name)}/24`;
-    img.addEventListener("error", () => img.remove());
     const label = document.createElement("span");
     label.textContent = name;
     chip.append(img, label);
@@ -836,7 +877,7 @@ function renderAccounts(list) {
     ? (activeAny.needsRelogin ? "Reconnexion requise" : "Compte actif")
     : (list.length ? "Aucun compte actif" : "Aucun compte");
   $("#account-hint").title = activeAny && activeAny.needsRelogin
-    ? "Ta session Microsoft a expiré — retire ce compte puis ajoute-le à nouveau pour te reconnecter"
+    ? "Ta session Microsoft a expiré — clique sur Reconnecter (dans Paramètres) pour la rouvrir en un clic"
     : "";
   setMcAvatar($("#account-avatar"), activeAny);
 
@@ -861,7 +902,7 @@ function renderAccounts(list) {
       const badge = document.createElement("span");
       badge.className = "row-badge warn";
       badge.textContent = "Reconnexion requise";
-      badge.title = "Ta session Microsoft a expiré — retire ce compte puis ajoute-le à nouveau pour te reconnecter";
+      badge.title = "Ta session Microsoft a expiré — clique sur Reconnecter pour la rouvrir";
       meta.appendChild(badge);
     } else if (account.active) {
       const badge = document.createElement("span");
@@ -871,6 +912,16 @@ function renderAccounts(list) {
     }
     const actions = document.createElement("div");
     actions.className = "row-actions";
+    if (account.needsRelogin) {
+      // #6 : reconnexion en UN clic — la fenêtre Microsoft se rouvre et le compte est remplacé
+      // automatiquement (même UUID) : plus besoin de « Retirer puis re-ajouter ».
+      const reBtn = document.createElement("button");
+      reBtn.className = "ghost-btn small";
+      reBtn.textContent = "Reconnecter";
+      reBtn.title = "Rouvre la fenêtre Microsoft — le compte reprend sa place tout seul";
+      reBtn.addEventListener("click", () => addAccount(reBtn));
+      actions.appendChild(reBtn);
+    }
     if (!account.active) {
       const useBtn = document.createElement("button");
       useBtn.className = "ghost-btn small";
@@ -890,20 +941,24 @@ function renderAccounts(list) {
   refreshPlayButton();
 }
 
+let addAccountBusy = false; // une seule fenêtre Microsoft à la fois (plusieurs boutons y mènent : JOUER, ligne de compte, Paramètres, onboarding)
 async function addAccount(button) {
+  if (addAccountBusy) return { ok: false, reason: "already-open" }; // #11 : deux appels concurrents laisseraient un bouton figé sur « Fenêtre ouverte… »
+  addAccountBusy = true;
   const btn = button ?? $("#btn-add-account");
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = "Fenêtre Microsoft ouverte…";
+  const wasDisabled = btn && btn.disabled;
+  if (btn) btn.disabled = true;
+  const original = btn ? btn.textContent : "";
+  if (btn) btn.textContent = "Fenêtre Microsoft ouverte…";
   try {
     const result = await api.accounts.add();
     if (result.ok) toast(`Bienvenue, ${result.name} !`);
     else if (result.reason === "cancelled") toast("Connexion annulée.");
-    else toast(`Connexion impossible : ${result.reason}`, 6000);
+    else if (result.reason !== "already-open") toast(`Connexion impossible : ${result.reason}`, 6000);
     return result;
   } finally {
-    btn.disabled = false;
-    btn.textContent = original;
+    if (btn) { btn.disabled = wasDisabled || false; btn.textContent = original; }
+    addAccountBusy = false;
   }
 }
 $("#btn-add-account").addEventListener("click", () => addAccount());
@@ -1576,7 +1631,7 @@ async function loadMyStats(force) {
     : '🔓 Tes stats sont <b>publiques</b>. Pour les cacher : tape <code>/meyprivacy cacher</code> en jeu (en privé, tu ne reçois pas les récompenses des défis communautaires).'; }
   { const so = $("#mystats-social"); if (so) {
     const bits = [];
-    const present = presenceByPlayer(res.data)[me];
+    const present = presenceByPlayerMemo(res.data)[me];
     const streak = present ? currentStreak(present, statTodayKey()) : 0;
     if (streak >= 2) bits.push(`🔥 <b>${streak} jours</b> de connexion d'affilée`);
     const partner = myTopPartner(res.data, me);
@@ -1879,6 +1934,30 @@ function maxSlot(arr) {
   if (Array.isArray(arr)) for (const v of arr) if (typeof v === "number" && v > m) m = v;
   return m;
 }
+// #5 : mémo des calculs lourds, PAR RELEVÉ. Chaque fetch produit un nouvel objet data (la WeakMap
+// se vide donc toute seule) ; dans la fenêtre de cache, « Mes stats » et « Communauté » réutilisent
+// les mêmes résultats au lieu de rebalayer tous les jours × joueurs. Aucun changement d'affichage.
+const _calcMemo = new WeakMap();
+function calcMemo(data, key, compute) {
+  if (!data || typeof data !== "object") return compute();
+  let slot = _calcMemo.get(data);
+  if (!slot) { slot = {}; _calcMemo.set(data, slot); }
+  if (!(key in slot)) slot[key] = compute();
+  return slot[key];
+}
+// Pic de joueurs par jour, calculé UNE fois par relevé (avant : ~4 balayages complets de days —
+// records, moments, semaine — pour exactement les mêmes nombres).
+function dayPeaks(data) {
+  return calcMemo(data, "dayPeaks", () => {
+    const days = (data && data.days) ? data.days : {};
+    const out = {};
+    for (const k of Object.keys(days)) out[k] = maxSlot((days[k] && days[k].slots) || []);
+    return out;
+  });
+}
+const presenceByPlayerMemo = (data) => calcMemo(data, "presence", () => presenceByPlayer(data));
+const computeDuosMemo = (data) => calcMemo(data, "duos", () => computeDuos(data));
+const computePlayerMetricsMemo = (data) => calcMemo(data, "metrics", () => computePlayerMetrics(data));
 // Agrégat (saison courante) pour un défi communautaire.
 function aggChallenge(data, metric) {
   // Total communautaire anonyme publié par la sonde (inclut les joueurs privés) → barre = déclenchement réel.
@@ -1901,6 +1980,16 @@ function myChallengeShare(data, metric, me) {
   if (metric === "totalPlayMinutes") return s.minutes || 0;
   if (s.mc && typeof s.mc[metric] === "number") return s.mc[metric];
   return null;
+}
+// #2 : fin d'un défi en français simple (« se termine dans 3 jours ») — jours entiers, puis heures.
+function challengeEndsText(to, now) {
+  const t = new Date(to).getTime();
+  if (!Number.isFinite(t) || t <= now) return "";
+  const days = Math.floor((t - now) / 86400000);
+  if (days >= 1) return `se termine dans ${days} jour${days > 1 ? "s" : ""}`;
+  const h = Math.floor((t - now) / 3600000);
+  if (h >= 1) return `se termine dans ${h} h`;
+  return "se termine dans moins d'une heure";
 }
 function renderChallenges(challenges, data, me) {
   const box = $("#comm-challenges");
@@ -1929,10 +2018,12 @@ function renderChallenges(challenges, data, me) {
     const pct = Math.max(0, Math.min(100, Math.round(cur / c.target * 100)));
     const done = cur >= c.target;
     const mine = myChallengeShare(data, c.metric, me);
+    const ends = (c.to && !done) ? challengeEndsText(c.to, now) : ""; // #2 : le joueur voit le temps restant
     return `<div class="comm-challenge${done ? " done" : ""}">`
       + `<div class="comm-challenge-head"><span>${escapeHtml(c.title || "Défi")}</span>`
       + `<span class="comm-challenge-num">${escapeHtml(fmtV(c.metric, Math.min(cur, c.target)))} / ${escapeHtml(fmtV(c.metric, c.target))}${done ? " ✓" : ""}</span></div>`
       + `<div class="comm-challenge-bar"><div class="comm-challenge-fill" data-pct="${pct}"></div></div>`
+      + (ends ? `<div class="comm-challenge-ends">⏳ ${escapeHtml(ends)}</div>` : "")
       + (mine != null && mine > 0 && !done ? `<div class="comm-challenge-mine">dont toi : ${escapeHtml(fmtV(c.metric, mine))}</div>` : "")
       + (c.reward ? `<div class="comm-challenge-reward">🎁 ${escapeHtml(c.reward)}</div>` : "")
       + `</div>`;
@@ -1982,20 +2073,24 @@ function collectiveMilestones(c) {
 }
 // Mini activité de la semaine : pic de joueurs par jour sur les 7 derniers jours (barres CSS, zéro requête).
 function weekActivityHtml(data) {
-  const days = (data && data.days) ? data.days : {};
+  const peaks = dayPeaks(data);
   const today = statTodayKey();
   const items = [];
   let maxPeak = 0;
   for (let i = 6; i >= 0; i--) {
     const k = dayKeyShift(today, -i);
-    const pk = days[k] ? maxSlot(days[k].slots || []) : 0;
+    const pk = peaks[k] || 0;
     maxPeak = Math.max(maxPeak, pk);
-    const lbl = new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "narrow" });
-    items.push({ k, pk, lbl, isToday: k === today });
+    // #1 : « lun. mar. mer. » au lieu d'une seule lettre (L M M : deux M indistinguables), et
+    // infobulle en français (« mardi 30 juin — pic : 4 joueurs ») au lieu de la date machine.
+    const lbl = new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short" });
+    const dateFr = new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    items.push({ k, pk, lbl, dateFr, isToday: k === today });
   }
   if (!maxPeak) return "";
+  const picTxt = (pk) => pk === 0 ? "personne" : `pic : ${pk} joueur${pk > 1 ? "s" : ""}`;
   return `<div class="comm-week"><span class="comm-week-title">📈 La semaine — record de joueurs en même temps, jour par jour</span>`
-    + items.map((d) => `<div class="comm-week-day${d.isToday ? " today" : ""}" title="${escapeHtml(d.k)} — pic ${d.pk}">`
+    + items.map((d) => `<div class="comm-week-day${d.isToday ? " today" : ""}" title="${escapeHtml(d.dateFr)} — ${picTxt(d.pk)}">`
       + `<div class="comm-week-bar"><div class="comm-week-fill" data-h="${d.pk ? Math.max(6, Math.round(d.pk / maxPeak * 100)) : 0}"></div></div>`
       + `<span class="comm-week-lbl">${escapeHtml(d.lbl)}</span></div>`).join("")
     + `</div>`;
@@ -2053,10 +2148,10 @@ function renderHallOfFame(data, metrics) {
   if (!titles.length) { box.innerHTML = ""; return; }
   box.innerHTML = `<div class="comm-moments-title">🏅 Les titres de la saison</div><div class="comm-hof-grid">`
     + titles.map((c) => `<div class="comm-hof-card"><div class="comm-hof-cat">${c.emoji} ${escapeHtml(c.label)}</div>`
-      + `<div class="comm-hof-name"><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(c.uuid || c.name)}/24" alt="">${escapeHtml(c.name)}</div>`
+      + `<div class="comm-hof-name"><img class="comm-rank-ava" width="24" height="24" loading="lazy" src="https://mc-heads.net/avatar/${encodeURIComponent(c.uuid || c.name)}/24" alt="">${escapeHtml(c.name)}</div>`
       + `<div class="comm-hof-val">${escapeHtml(c.value)}</div></div>`).join("")
     + `</div>`;
-  box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
+  box.querySelectorAll("img.comm-rank-ava").forEach((img) => hardenAvatar(img));
 }
 function dayKeyShift(dayKey, delta) {
   const dt = new Date(dayKey + "T12:00:00");
@@ -2084,7 +2179,7 @@ function currentStreak(daySet, today) {
 }
 function computeStreaks(data) {
   const seen = (data && data.seen) || {}, priv = (data && data.priv) || {};
-  const present = presenceByPlayer(data);
+  const present = presenceByPlayerMemo(data);
   const today = statTodayKey();
   const out = [];
   for (const name of Object.keys(present)) {
@@ -2125,7 +2220,7 @@ function computeDuos(data) {
 }
 function renderDuos(data) {
   const box = $("#comm-duos"); if (!box) return;
-  const list = computeDuos(data).slice(0, 5);
+  const list = computeDuosMemo(data).slice(0, 5);
   if (!list.length) { box.innerHTML = ""; return; }
   box.innerHTML = `<div class="comm-moments-title">🤝 Les meilleurs binômes</div><div class="comm-board">`
     + list.map((d, i) => `<div class="comm-rank"><span class="comm-rank-pos comm-rank-${i + 1}">${i + 1}</span><span class="comm-rank-name">${escapeHtml(d.a)} + ${escapeHtml(d.b)}</span><span class="comm-rank-val">${fmtPlayTime(d.minutes)} ensemble</span></div>`).join("")
@@ -2142,23 +2237,22 @@ function percentileOf(data, key, myVal) {
   return "parmi les " + Math.max(1, Math.round((rank / vals.length) * 100)) + " % meilleurs du serveur";
 }
 function myTopPartner(data, me) {
-  const d = computeDuos(data).find((x) => x.a === me || x.b === me);
+  const d = computeDuosMemo(data).find((x) => x.a === me || x.b === me);
   return d ? { partner: d.a === me ? d.b : d.a, minutes: d.minutes } : null;
 }
 function renderCommunityRecords(data) {
   const box = $("#comm-records");
   if (!box) return;
   const seen = (data && data.seen) ? data.seen : {};
-  const days = (data && data.days) ? data.days : {};
-  const peakOf = (obj) => maxSlot((obj && obj.slots) || []);
+  const peaks = dayPeaks(data); // #5 : pics par jour calculés une fois pour toute la page
   let peak = 0, peakDay = null;
-  for (const [d, obj] of Object.entries(days)) { const pk = peakOf(obj); if (pk > peak) { peak = pk; peakDay = d; } }
+  for (const [d, pk] of Object.entries(peaks)) { if (pk > peak) { peak = pk; peakDay = d; } }
   const pub = pubEntries(data);
   const uniques = pub.length;
   const today = statTodayKey();
-  const todayPeak = days[today] ? peakOf(days[today]) : 0;
+  const todayPeak = peaks[today] || 0;
   let otherPeak = 0;
-  for (const [d, obj] of Object.entries(days)) { if (d === today) continue; const pk = peakOf(obj); if (pk > otherPeak) otherPeak = pk; }
+  for (const [d, pk] of Object.entries(peaks)) { if (d !== today && pk > otherPeak) otherPeak = pk; }
   const rec = (data && data.records) ? data.records : {};
   // « Nouveau record » seulement si le pic du jour dépasse AUSSI le record officiel persisté par le mod
   // (sauf s'il date d'aujourd'hui : c'est alors le même événement).
@@ -2207,7 +2301,7 @@ function renderCommunityMc(data, me) {
     { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
   ];
   let any = false;
-  const row = (r, i, m) => `<div class="comm-rank${me && r.name === me ? " is-me" : ""}"><span class="comm-rank-pos comm-rank-${Math.min(i + 1, 3)}">${i === 0 ? "👑" : i + 1}</span><img class="comm-rank-ava" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}${me && r.name === me ? '<span class="me-tag">toi</span>' : ""}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`;
+  const row = (r, i, m) => `<div class="comm-rank${me && r.name === me ? " is-me" : ""}"><span class="comm-rank-pos comm-rank-${Math.min(i + 1, 3)}">${i === 0 ? "👑" : i + 1}</span><img class="comm-rank-ava" width="22" height="22" loading="lazy" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}${me && r.name === me ? '<span class="me-tag">toi</span>' : ""}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`;
   const cols = metrics.map((m) => {
     const ranked = pubEntries(data)
       .map(([name, s]) => {
@@ -2230,7 +2324,7 @@ function renderCommunityMc(data, me) {
     return `<div class="comm-board"><div class="comm-board-title"${m.tip ? ` title="${m.tip}"` : ""}>${m.label}</div>${rows}</div>`;
   }).join("");
   box.innerHTML = any ? `<div class="comm-moments-title">🎮 Classements en jeu<span class="comm-period">depuis le début de Meytopia</span></div><div class="comm-boards">${cols}</div>` : "";
-  box.querySelectorAll("img.comm-rank-ava").forEach((img) => img.addEventListener("error", () => img.remove()));
+  box.querySelectorAll("img.comm-rank-ava").forEach((img) => hardenAvatar(img));
 }
 
 // Détection des "moments" du serveur depuis les données (joueurs /meyprivacy exclus : leurs pseudos
@@ -2244,11 +2338,11 @@ function detectMoments(data) {
   const today = statTodayKey();
   const dayLabelFr = (k) => { try { return new Date(k + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); } catch { return k; } };
 
-  // 1) Record absolu de joueurs simultanés
+  // 1) Record absolu de joueurs simultanés (pics par jour partagés avec records/semaine — #5)
+  const peaks = dayPeaks(data);
   let recordPeak = 0, recordDay = null;
   for (const k of dayKeys) {
-    const slots = (days[k].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = maxSlot(slots);
+    const pk = peaks[k] || 0;
     if (pk > recordPeak) { recordPeak = pk; recordDay = k; }
   }
   if (recordPeak >= 2 && recordDay !== today) {
@@ -2257,8 +2351,7 @@ function detectMoments(data) {
 
   // 2) Pic du jour même
   if (days[today]) {
-    const slots = (days[today].slots || []).filter((v) => typeof v === "number" && v >= 0);
-    const pk = maxSlot(slots);
+    const pk = peaks[today] || 0;
     if (pk >= 2 && today !== recordDay) moments.push({ emoji: "📈", text: `Aujourd'hui, jusqu'à ${pk} joueurs réunis`, when: "aujourd'hui" });
   }
 
@@ -2305,7 +2398,7 @@ function detectMoments(data) {
   let bestDay = null, bestPeak = 0;
   for (const k of dayKeys) {
     if (k === recordDay || k === today) continue;
-    const pk = maxSlot((days[k].slots || []).filter((v) => typeof v === "number" && v >= 0));
+    const pk = peaks[k] || 0;
     if (pk > bestPeak) { bestPeak = pk; bestDay = k; }
   }
   if (bestDay && bestPeak >= 2) {
@@ -2361,14 +2454,39 @@ function updateHomePulse(status) {
   banner.hidden = false;
 }
 
+// #3 : âge du dernier relevé temps réel, en mots simples (null si l'horodatage est illisible).
+function liveAgeText(updatedAt, now) {
+  const t = updatedAt ? new Date(updatedAt).getTime() : NaN;
+  if (!Number.isFinite(t)) return null;
+  const min = Math.max(1, Math.round((now - t) / 60000));
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  return "il y a plus d'un jour";
+}
 // « Qui joue maintenant » à partir de live.json (temps réel publié par la sonde-mod).
-// Renvoie l'objet live s'il est FRAIS (< 5 min), sinon null (sonde en pause → on masque).
+// Renvoie l'objet live s'il est FRAIS (< 5 min), sinon null. #3 : un relevé périmé n'est plus
+// masqué en silence — le bloc reste visible et dit honnêtement de quand date la dernière info.
 function renderLivePanel(live) {
   const box = $("#comm-live");
   if (!box) return null;
+  // #7 : la pastille du titre doit suivre l'état — verte seulement quand l'info est fraîche,
+  // grise en mode « relevé périmé » (sinon le titre affirme « en direct » alors qu'on ne sait plus).
+  const titleEl = box.querySelector(".comm-live-title");
   const fresh = live && live.updatedAt && (Date.now() - new Date(live.updatedAt).getTime() < 5 * 60 * 1000);
-  if (!fresh) { box.hidden = true; return null; }
+  if (!fresh) {
+    const age = live ? liveAgeText(live.updatedAt, Date.now()) : null;
+    if (!age) { box.hidden = true; return null; } // jamais eu de relevé : rien à dater, on masque
+    box.hidden = false;
+    if (titleEl) titleEl.textContent = "⚪ Qui joue — infos en pause";
+    $("#comm-live-meta").textContent = `dernier relevé ${age}`;
+    $("#comm-live-meta").title = "La sonde n'a rien publié depuis — les infos en direct reviendront avec le prochain relevé.";
+    const stale = $("#comm-live-list");
+    stale.textContent = "Pas d'infos fraîches — impossible de dire qui joue en ce moment (le serveur est peut-être éteint).";
+    return null;
+  }
   box.hidden = false;
+  if (titleEl) titleEl.textContent = "🟢 Qui joue maintenant";
   const players = Array.isArray(live.players) ? live.players : [];
   const count = typeof live.count === "number" ? live.count : players.length;
   // « TPS » (indicateur d'admin) traduit en mots de tous les jours : fluide dès 19, sinon ça rame.
@@ -2386,8 +2504,8 @@ function renderLivePanel(live) {
       chip.className = "player-chip";
       const img = document.createElement("img");
       img.alt = "";
+      hardenAvatar(img, 22);
       img.src = `https://mc-heads.net/avatar/${encodeURIComponent(p.uuid || p.name)}/24`;
-      img.addEventListener("error", () => img.remove());
       const label = document.createElement("span");
       const since = typeof p.sessionSeconds === "number"
         ? ` · depuis ${fmtPlayTime(Math.max(1, Math.round(p.sessionSeconds / 60)))}`
@@ -2467,7 +2585,7 @@ async function loadCommunity(force) {
   const card = $("#comm-hero-card");
   let metrics = null;
   if (data && data.seen && Object.keys(data.seen).length) {
-    metrics = computePlayerMetrics(data);
+    metrics = computePlayerMetricsMemo(data);
     const hero = pickHeroOfDay(metrics);
     if (hero) {
       card.hidden = false;
@@ -2634,12 +2752,14 @@ async function refreshCommunityLive() {
   let live = null;
   try { live = await api.app.liveStatus(); } catch { live = null; }
   const liveFresh = renderLivePanel(live);
-  if (liveFresh) {
-    const p = pulseMessage(Boolean(liveFresh.online), liveFresh.online ? (liveFresh.count || 0) : 0);
-    $("#comm-pulse-emoji").textContent = p.emoji;
-    $("#comm-pulse-text").textContent = p.text;
-    $("#comm-pulse-sub").textContent = p.sub;
-  }
+  // #6 : le pouls doit rester cohérent avec le bloc live. Frais → chiffres réels ; périmé → « état
+  // inconnu » (sinon le pouls afficherait encore « X en ligne » à côté d'un « dernier relevé il y a … »).
+  const p = liveFresh
+    ? pulseMessage(Boolean(liveFresh.online), liveFresh.online ? (liveFresh.count || 0) : 0)
+    : pulseMessage(null, 0);
+  $("#comm-pulse-emoji").textContent = p.emoji;
+  $("#comm-pulse-text").textContent = p.text;
+  $("#comm-pulse-sub").textContent = p.sub;
 }
 setInterval(() => {
   if (ui.page === "community" && !document.hidden) refreshCommunityLive();

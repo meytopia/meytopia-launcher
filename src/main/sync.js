@@ -74,25 +74,37 @@ function listFiles(relDir) {
 
 /**
  * Compare le manifest au disque.
+ * @param {(done:number, total:number) => void} [onProgress]  Avancement de la vérification
+ *   (appelé au plus toutes les ~150 ms : le premier lancement re-hache tout le pack, c'est long —
+ *   sans retour visuel, le joueur croit que le launcher est gelé).
  * @returns {Promise<{toDownload: object[], unknown: string[]}>}
  */
-async function diff(manifest) {
+async function diff(manifest, onProgress) {
   const cache = readHashCache();
   const toDownload = [];
   const manifestPaths = new Set();
+  const total = (manifest.files ?? []).length;
+  let done = 0, lastTick = 0;
+  const tick = () => {
+    done += 1;
+    if (!onProgress) return;
+    const now = Date.now();
+    if (done === total || now - lastTick >= 150) { lastTick = now; try { onProgress(done, total); } catch { /* affichage seulement */ } }
+  };
 
   for (const file of manifest.files ?? []) {
     // Mod désactivé depuis la régie (enabled:false) : on ne le télécharge pas, et on le marque
     // comme "connu" pour ne pas le signaler hors-modpack (sa suppression éventuelle passe par la blocklist).
-    if (file && file.enabled === false) { if (file.path) manifestPaths.add(file.path); continue; }
+    if (file && file.enabled === false) { if (file.path) manifestPaths.add(file.path); tick(); continue; }
     let abs;
     try { abs = safeGamePath(file.path); }
-    catch (e) { console.warn('[sync] entrée manifest ignorée (chemin refusé) :', file.path); continue; }
+    catch (e) { console.warn('[sync] entrée manifest ignorée (chemin refusé) :', file.path); tick(); continue; }
     manifestPaths.add(file.path);
     // Intégrité obligatoire : sans SHA-1 vérifiable (40 hex), on n'installe pas ce fichier.
     // Il reste "connu" (déjà dans manifestPaths → pas signalé hors-modpack) mais n'est pas téléchargé.
     if (!/^[0-9a-f]{40}$/i.test(String(file.sha1 || ''))) {
       console.warn('[sync] fichier ignoré (SHA-1 manquant/invalide dans le manifest) :', file.path);
+      tick();
       continue;
     }
     let needs = true;
@@ -112,12 +124,21 @@ async function diff(manifest) {
         relPath: file.path,
       });
     }
+    tick();
   }
 
-  // Fichiers hors modpack : signalés, JAMAIS supprimés (CDC F5)
+  // Fichiers hors modpack : signalés, JAMAIS supprimés (CDC F5).
+  // Les restes de téléchargement du LAUNCHER (.part + sa méta .part.sha1, laissés par downloads.js
+  // pour la reprise après coupure) ne sont PAS des ajouts du joueur : on ne les signale pas — sinon
+  // fausse alerte à chaque reprise. En revanche, un .part POSÉ PAR LE JOUEUR (ex. téléchargement
+  // navigateur inachevé glissé dans mods/, SANS méta .part.sha1) reste un fichier hors modpack normal :
+  // on le signale comme avant (et on n'y touchera jamais).
   const unknown = [];
   for (const dir of DETECT_DIRS) {
-    for (const rel of listFiles(dir)) {
+    const files = listFiles(dir);
+    const present = new Set(files);
+    for (const rel of files) {
+      if (isLauncherPart(rel, present)) continue;
       if (!manifestPaths.has(rel)) unknown.push(rel);
     }
   }
@@ -127,12 +148,50 @@ async function diff(manifest) {
 }
 
 /**
+ * Reste de téléchargement créé par LE LAUNCHER, distinct d'un fichier homonyme du joueur.
+ * Le launcher écrit toujours la paire « X.part » + « X.part.sha1 » (downloads.js) :
+ *  - un « .part.sha1 » n'est jamais créé par un joueur → c'est toujours notre méta ;
+ *  - un « .part » n'est à nous que si sa méta « .part.sha1 » est présente à côté.
+ * Un « .part » seul (téléchargement navigateur inachevé déposé par le joueur) n'est donc PAS à nous.
+ */
+function isLauncherPart(rel, presentSet) {
+  const r = String(rel);
+  if (/\.part\.sha1$/i.test(r)) return true;
+  if (/\.part$/i.test(r)) return presentSet.has(r + '.sha1');
+  return false;
+}
+
+/**
+ * Ménage des restes .part orphelins DU LAUNCHER uniquement : un téléchargement coupé laisse « X.part »
+ * + « X.part.sha1 » pour la reprise (downloads.js). Si le fichier visé n'est plus au programme — déjà
+ * à jour, retiré du pack, ou version changée — ces restes ne seront jamais repris : on les efface
+ * (espace disque + plus jamais signalés « hors modpack »). On ne touche JAMAIS à un .part du joueur
+ * (sans méta .part.sha1), ni aux .part encore à télécharger (reprise en cours).
+ */
+function cleanupOrphanParts(toDownloadDests) {
+  const keep = new Set(toDownloadDests.map((d) => path.resolve(d)));
+  for (const dir of MANAGED_DIRS) {
+    const files = listFiles(dir);
+    const present = new Set(files);
+    for (const rel of files) {
+      if (!isLauncherPart(rel, present)) continue; // reste du launcher seulement
+      const abs = path.join(getGameDir(), rel);
+      const base = path.resolve(abs.replace(/\.part(\.sha1)?$/i, ''));
+      if (!keep.has(base)) { try { fs.rmSync(abs, { force: true }); } catch { /* best-effort */ } }
+    }
+  }
+}
+
+/**
  * Vérifie et télécharge le delta du modpack.
  * @returns {Promise<{ok:boolean, unknown:string[], downloaded:number}>}
  */
-async function syncPack(manifest) {
+async function syncPack(manifest, onProgress, onDownloadStart) {
   lastManifest = manifest;
-  const { toDownload, unknown } = await diff(manifest);
+  const { toDownload, unknown } = await diff(manifest, onProgress);
+  // Efface les .part orphelins (fichiers déjà à jour, retirés du pack ou de version changée) AVANT
+  // le retour anticipé « rien à télécharger » — sinon un orphelin survivrait à chaque synchro.
+  cleanupOrphanParts(toDownload.map((j) => j.dest));
   if (!toDownload.length) return { ok: true, unknown, downloaded: 0 };
 
   // Garde-fou espace disque : on refuse de démarrer un téléchargement voué à l'échec (I11)
@@ -145,6 +204,9 @@ async function syncPack(manifest) {
       freeGb: Number((free / 1073741824).toFixed(1)),
     };
   }
+  // Le hachage est fini, le téléchargement commence : on le signale pour que le bouton JOUER ne reste
+  // pas figé sur « Vérification… X/X » pendant toute la descente des fichiers (le volet, lui, détaille).
+  if (onDownloadStart) { try { onDownloadStart(toDownload.length); } catch { /* affichage seulement */ } }
   const ok = await downloads.run(`Modpack ${manifest.version ?? ''}`.trim(), toDownload);
   if (ok) {
     // Met à jour le cache de hash pour les fichiers fraîchement écrits

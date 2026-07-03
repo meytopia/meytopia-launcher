@@ -30,6 +30,22 @@ const isRunning = () => running || preparing;
 
 const setState = (state, text = '') => emitToRenderer('game:state', { state, text });
 
+/** Traduit les erreurs techniques fréquentes en français simple + geste conseillé.
+ *  Le code d'origine reste entre parenthèses : utile si le joueur demande de l'aide. */
+function frError(raw) {
+  const s = String(raw ?? '');
+  const cases = [
+    [/ENOSPC/i, 'Plus de place sur ton disque — libère de l\'espace puis réessaie', 'ENOSPC'],
+    [/EBUSY|EPERM|EACCES/i, 'Un fichier du jeu est bloqué (souvent l\'antivirus, ou le jeu encore ouvert) — ferme tout, mets le dossier du jeu en exception antivirus, puis réessaie', 'fichier bloqué'],
+    [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|fetch failed|network/i, 'Problème de connexion internet — vérifie ta connexion puis réessaie', 'réseau'],
+    [/java|jvm|jre/i, 'Java n\'a pas pu démarrer — redémarre le launcher ; s\'il insiste, utilise « Vérifier les fichiers » dans les Paramètres', 'Java'],
+  ];
+  for (const [re, msg] of cases) {
+    if (re.test(s)) return `${msg}. (détail : ${s.slice(0, 140)})`;
+  }
+  return s;
+}
+
 /**
  * Flux complet du bouton JOUER. Renvoie { ok, reason? } ;
  * la progression passe par les événements game:state et downloads:update.
@@ -75,7 +91,15 @@ async function play() {
     // Mode dégradé : on joue avec les fichiers en l'état, sans vérification (CDC F16)
     emitToRenderer('remote:offlinePlay', true);
   } else {
-    const result = await sync.syncPack(manifest);
+    // Avancement de la vérification (« 45/230 ») : le re-hash complet peut prendre du temps,
+    // sans ce retour le joueur croit que le launcher est gelé. Puis, quand le téléchargement démarre,
+    // on bascule le texte (le volet de téléchargement détaille la suite) — sinon le bouton resterait
+    // figé sur « Vérification… X/X » pendant toute la descente des fichiers.
+    const result = await sync.syncPack(
+      manifest,
+      (done, total) => setState('syncing', `Vérification des fichiers du modpack… ${done}/${total}`),
+      (n) => setState('syncing', `Téléchargement de ${n} fichier${n > 1 ? 's' : ''}…`),
+    );
     if (result.unknown.length) {
       content.registerDetected(result.unknown);
       emitToRenderer('content:unknown', result.unknown);
@@ -148,7 +172,7 @@ async function play() {
   });
   launch.on('error', (err) => {
     running = false;
-    setState('error', String(err?.error ?? err?.message ?? err));
+    setState('error', frError(err?.error ?? err?.message ?? err));
   });
 
   try {
@@ -174,7 +198,7 @@ async function play() {
     });
   } catch (err) {
     running = false;
-    setState('error', String(err?.message ?? err));
+    setState('error', frError(err?.message ?? err));
     return { ok: false, reason: 'launch-error' };
   }
 

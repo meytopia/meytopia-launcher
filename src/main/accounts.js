@@ -59,9 +59,16 @@ async function add() {
   if (res === false) return { ok: false, reason: 'cancelled' };
   if (res.error) return { ok: false, reason: String(res.error) };
 
+  // Le compte actif était-il cassé AVANT cet ajout ? (aucun compte actif, ou l'actif a une session
+  // expirée.) Si oui, on bascule sur le compte fraîchement connecté — même si c'en est un autre :
+  // le joueur venait justement réparer sa connexion, il doit pouvoir jouer tout de suite (audité).
+  const activeUuid = settings.read().activeAccount;
+  const activeWasBroken = !activeUuid
+    || !accounts.some((a) => a.profile.uuid === activeUuid && !a.needsRelogin);
+
   accounts = accounts.filter((a) => a.profile.uuid !== res.uuid);
   accounts.push({ profile: res, needsRelogin: false });
-  if (!settings.read().activeAccount) settings.write({ activeAccount: res.uuid });
+  if (activeWasBroken) settings.write({ activeAccount: res.uuid });
   persist();
   return { ok: true, name: res.name };
 }

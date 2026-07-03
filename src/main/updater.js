@@ -17,6 +17,7 @@ const setStatus = (next) => { status = { ...status, ...next }; emitToRenderer('u
 const updateRequired = () => ['available', 'downloading', 'ready'].includes(status.state);
 
 let autoUpdater = null;
+let lastCheckMs = 0; // dernière vérification lancée (auto, focus ou manuelle)
 
 /** Canal de mise à jour : stable (latest) ou bêta, selon le réglage — relu avant chaque vérification. */
 function applyChannel() {
@@ -52,15 +53,26 @@ function init() {
     else setStatus({ state: 'error' });
   });
 
+  lastCheckMs = Date.now();
   autoUpdater.checkForUpdates().catch(() => {});
-  // Vérification automatique chaque minute (fichier servi par CDN : sans risque)
-  setInterval(() => { applyChannel(); autoUpdater.checkForUpdates().catch(() => {}); }, 60 * 1000);
+  // Vérification automatique toutes les 30 minutes : inutile d'interroger le CDN chaque minute
+  // (règle « le PC du joueur d'abord ») — le retour de focus et le clic JOUER couvrent l'entre-deux.
+  setInterval(() => { check(); }, 30 * 60 * 1000);
 }
 
 function check() {
   if (!autoUpdater) return;
+  lastCheckMs = Date.now();
   applyChannel();
   autoUpdater.checkForUpdates().catch(() => {});
+}
+
+/** Re-vérification quand la fenêtre reprend le focus — au plus une fois toutes les 5 minutes
+ *  (un joueur qui alterne entre le jeu et le launcher ne doit pas mitrailler le CDN). */
+function focusCheck() {
+  if (!autoUpdater) return;
+  if (Date.now() - lastCheckMs < 5 * 60 * 1000) return;
+  check();
 }
 
 /** « Redémarrer et installer » (CDC F3). */
@@ -69,4 +81,4 @@ function quitAndInstall() {
   if (autoUpdater && status.state === 'ready') autoUpdater.quitAndInstall(true, true);
 }
 
-module.exports = { bindEmitter, init, check, quitAndInstall, getStatus, updateRequired };
+module.exports = { bindEmitter, init, check, focusCheck, quitAndInstall, getStatus, updateRequired };

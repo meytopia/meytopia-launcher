@@ -36,6 +36,9 @@ const code = [
   extractFn('statDayKeys'),
   extractFn('statTodayKey'),
   extractFn('maxSlot'),
+  extractConst('_calcMemo'),
+  extractFn('calcMemo'),
+  extractFn('dayPeaks'),
   extractFn('dayKeyShift'),
   extractFn('pubEntries'),
   extractFn('fmtKm'),
@@ -43,12 +46,15 @@ const code = [
   extractFn('collectiveMilestones'),
   extractFn('weekActivityHtml'),
   extractFn('computePlayerMetrics'),
+  extractConst('computePlayerMetricsMemo'),
+  extractFn('challengeEndsText'),
+  extractFn('liveAgeText'),
   extractFn('percentileOf'),
   extractFn('detectMoments'),
   extractFn('seasonTitles'),
   extractFn('myChallengeShare'),
   extractFn('pulseMessage'),
-  'module.exports = { fmtPlayTime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift };',
+  'module.exports = { fmtPlayTime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
 ].join('\n');
 const mod = { exports: {} };
 new Function('module', 'require', code)(mod, require);
@@ -196,6 +202,51 @@ check('myChallengeShare inconnu → null', L.myChallengeShare(data, 'mobKills', 
   d7.server.firstStartAt = new Date(Date.now() - 2 * 86400000).toISOString(); // ouverte avant-hier
   const txt7 = L.detectMoments(d7).map((m) => m.text).join(' | ');
   check('saison jeune + 0 privé → « vient d\'ouvrir » affiché', txt7.includes('vient d\'ouvrir'));
+}
+
+// Vague C (0.28.0) — #2 : temps restant d'un défi en français simple
+{
+  const now = Date.UTC(2026, 6, 3, 12, 0, 0);
+  eq('challengeEndsText 3,5 jours → jours entiers', L.challengeEndsText(new Date(now + 3.5 * 86400000).toISOString(), now), 'se termine dans 3 jours');
+  eq('challengeEndsText 26 h → 1 jour (singulier)', L.challengeEndsText(new Date(now + 26 * 3600000).toISOString(), now), 'se termine dans 1 jour');
+  eq('challengeEndsText 2 h → heures', L.challengeEndsText(new Date(now + 2 * 3600000 + 60000).toISOString(), now), 'se termine dans 2 h');
+  eq('challengeEndsText 30 min → moins d\'une heure', L.challengeEndsText(new Date(now + 30 * 60000).toISOString(), now), 'se termine dans moins d\'une heure');
+  eq('challengeEndsText passé → vide', L.challengeEndsText(new Date(now - 1000).toISOString(), now), '');
+  eq('challengeEndsText date illisible → vide', L.challengeEndsText('pas-une-date', now), '');
+}
+
+// Vague C — #3 : âge du dernier relevé live (état honnête au lieu de masquer le bloc)
+{
+  const now = Date.UTC(2026, 6, 3, 12, 0, 0);
+  eq('liveAgeText 2 min', L.liveAgeText(new Date(now - 2 * 60000).toISOString(), now), 'il y a 2 min');
+  eq('liveAgeText 90 min → heures', L.liveAgeText(new Date(now - 90 * 60000).toISOString(), now), 'il y a 1 h');
+  eq('liveAgeText 30 h → plus d\'un jour', L.liveAgeText(new Date(now - 30 * 3600000).toISOString(), now), 'il y a plus d\'un jour');
+  check('liveAgeText horodatage illisible → null', L.liveAgeText('n\'importe quoi', now) === null);
+  check('liveAgeText absent → null', L.liveAgeText(undefined, now) === null);
+}
+
+// Vague C — #5 : dayPeaks = mêmes pics que maxSlot jour par jour, et mémorisé par relevé
+{
+  const d8 = { days: {
+    '2026-07-01': { slots: (() => { const s = Array(1440).fill(null); s[100] = 3; s[200] = 5; return s; })() },
+    '2026-07-02': { slots: Array(1440).fill(null) },
+    '2026-07-03': {},
+  } };
+  const p1 = L.dayPeaks(d8);
+  eq('dayPeaks calcule le pic de chaque jour', p1, { '2026-07-01': 5, '2026-07-02': 0, '2026-07-03': 0 });
+  check('dayPeaks mémorisé (même objet data → même résultat, sans recalcul)', L.dayPeaks(d8) === p1);
+  check('computePlayerMetricsMemo mémorisé par relevé', L.computePlayerMetricsMemo(d8) === L.computePlayerMetricsMemo(d8));
+  check('dayPeaks({}) et data null : pas de plantage', JSON.stringify(L.dayPeaks({})) === '{}' && JSON.stringify(L.dayPeaks(null)) === '{}');
+}
+
+// Vague C — #1 : la semaine affiche des libellés « lun. » (pas une lettre) et une infobulle française
+{
+  const today = L.statTodayKey();
+  const d9 = { days: { [today]: { slots: (() => { const s = Array(1440).fill(null); s[600] = 2; return s; })() } } };
+  const w = L.weekActivityHtml(d9);
+  check('semaine : infobulle « pic : 2 joueurs » en français', w.includes('pic : 2 joueurs'));
+  check('semaine : jours vides « personne » dans l\'infobulle', w.includes('personne'));
+  check('semaine : plus de date machine AAAA-MM-JJ dans l\'infobulle', !/title="\d{4}-\d{2}-\d{2}/.test(w));
 }
 
 if (fails === 0) { console.log('\n✔ launcher : tous les tests passent.'); process.exit(0); }

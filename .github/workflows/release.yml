@@ -38,6 +38,7 @@ jobs:
           node -e "new (require('vm').Script)(require('fs').readFileSync('src/renderer/js/app.js','utf8')); console.log('renderer OK')"
           node -e "new (require('vm').Script)(require('fs').readFileSync('src/main/main.js','utf8')); console.log('main OK')"
           node tools/launcher-test.js
+          node tools/main-test.js
 
       - name: Build de l'installeur
         # Signature de code AUTOMATIQUE si les secrets CSC_LINK (PFX base64) + CSC_KEY_PASSWORD sont définis ;

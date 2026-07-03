@@ -417,7 +417,13 @@ ipcMain.handle('optional:uninstall', (_e, id) => serializeOptional(async () => {
 }));
 
 /* ── IPC : jeu, synchro, téléchargements ───────────────────── */
-ipcMain.handle('play:start', () => game.play());
+ipcMain.handle('play:start', () => {
+  // Clic JOUER = bon moment pour re-vérifier la mise à jour du launcher : avec l'intervalle passé à
+  // 30 min, sans ceci une mise à jour OBLIGATOIRE (minLauncherVersion) pourrait tarder jusqu'à 30 min
+  // avant de commencer à se télécharger. Non bloquant : le verrou minLauncherVersion agit dans game.play().
+  updater.check();
+  return game.play();
+});
 ipcMain.handle('sync:fullCheck', async () => {
   sync.clearHashCache(); // re-hash intégral (CDC F5, F13)
   const { data: config } = await remote.getLauncherConfig();
@@ -682,6 +688,9 @@ app.whenReady().then(() => {
   createWindow();
   setupTray();
   updater.init(); // vérification au démarrage (CDC F3)
+  // Retour de focus sur la fenêtre = bon moment pour re-vérifier la mise à jour
+  // (le throttle est dans focusCheck : au plus une vérification toutes les 5 min).
+  app.on('browser-window-focus', () => updater.focusCheck());
 
   // Reconnexion silencieuse des sessions, sans bloquer l'ouverture (CDC F2)
   accounts.refreshAll().then(broadcastAccounts).catch(() => broadcastAccounts());

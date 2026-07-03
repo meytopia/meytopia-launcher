@@ -101,14 +101,45 @@ async function downloadOne(job) {
   job.state = 'en cours';
   notify();
   const partPath = `${job.dest}.part`;
+  const metaPath = `${partPath}.sha1`; // SHA-1 attendu du .part : si le manifest change, on ne reprend pas un vieux morceau
   fs.mkdirSync(path.dirname(job.dest), { recursive: true });
+
+  // Reprise après coupure : un .part laissé par un échec précédent est repris là où il s'était
+  // arrêté (en-tête Range), à trois conditions — même fichier attendu (méta SHA-1 identique),
+  // taille plausible (< taille annoncée), et taille non nulle. Sinon : on repart de zéro.
+  let resumeFrom = 0;
+  try {
+    const st = fs.statSync(partPath);
+    const meta = fs.readFileSync(metaPath, 'utf8').trim().toLowerCase();
+    const sizePlausible = job.size > 0 ? st.size < job.size : false; // taille inconnue ou dépassée → pas de reprise
+    if (meta === String(job.sha1).toLowerCase() && st.size > 0 && sizePlausible) resumeFrom = st.size;
+  } catch { resumeFrom = 0; }
+  if (!resumeFrom) { fs.rmSync(partPath, { force: true }); fs.rmSync(metaPath, { force: true }); }
 
   const controller = new AbortController();
   state.controllers.add(controller);
+  // Par défaut on GARDE le .part après un échec (coupure réseau → reprise au prochain essai).
+  // On ne l'invalide que s'il est prouvé inutilisable (contenu corrompu, reprise refusée).
+  let invalidatePart = false;
   try {
-    const res = await fetch(job.url, { signal: controller.signal });
+    const res = await fetch(job.url, {
+      signal: controller.signal,
+      headers: resumeFrom ? { Range: `bytes=${resumeFrom}-` } : undefined,
+    });
+    if (resumeFrom && res.status === 206) {
+      // Reprise acceptée : les octets déjà sur le disque comptent dans la progression.
+      job.done += resumeFrom;
+      state.doneBytes += resumeFrom;
+      notify();
+    } else if (resumeFrom) {
+      // Le serveur ne gère pas la reprise (réponse 200 complète, ou 416) : le flux 'w' ci-dessous
+      // réécrit le fichier de zéro — GitHub la gère, ce chemin ne sert qu'aux cas exotiques.
+      resumeFrom = 0;
+      if (!res.ok) invalidatePart = true; // 416 & co : le .part est suspect, ne pas le retenter
+    }
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    const out = fs.createWriteStream(partPath);
+    fs.writeFileSync(metaPath, String(job.sha1).toLowerCase()); // avant le flux : une coupure en plein milieu laisse un .part reprenable
+    const out = fs.createWriteStream(partPath, resumeFrom ? { flags: 'a' } : undefined);
     const counter = new (require('stream').Transform)({
       transform(chunk, _enc, cb) {
         job.done += chunk.length;
@@ -119,15 +150,21 @@ async function downloadOne(job) {
     });
     await pipeline(Readable.fromWeb(res.body), counter, out);
 
-    // Intégrité : SHA-1 systématiquement vérifié après chaque téléchargement (CDC §7)
+    // Intégrité : SHA-1 du fichier COMPLET (morceau repris inclus), comme avant (CDC §7)
     const hash = await sha1File(partPath);
-    if (hash.toLowerCase() !== job.sha1.toLowerCase()) throw new Error('SHA-1 invalide');
+    if (hash.toLowerCase() !== job.sha1.toLowerCase()) {
+      invalidatePart = true; // contenu corrompu : le reprendre reproduirait l'échec à l'infini
+      throw new Error('SHA-1 invalide');
+    }
     fs.renameSync(partPath, job.dest); // écriture atomique
+    fs.rmSync(metaPath, { force: true });
     job.state = 'terminé';
     notify();
+  } catch (e) {
+    if (invalidatePart) { fs.rmSync(partPath, { force: true }); fs.rmSync(metaPath, { force: true }); }
+    throw e;
   } finally {
     state.controllers.delete(controller);
-    fs.rmSync(partPath, { force: true });
   }
 }
 

@@ -20,7 +20,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Syntaxe du renderer
-        run: node --check src/renderer/js/app.js
+      - name: Syntaxe du renderer + processus principal
+        run: |
+          node --check src/renderer/js/app.js
+          node --check src/main/sync.js
+          node --check src/main/downloads.js
+          node --check src/main/game.js
+          node --check src/main/accounts.js
+          node --check src/main/updater.js
+          node --check src/main/main.js
       - name: Tests fonctions pures (page Communauté)
         run: node tools/launcher-test.js
+      - name: Tests processus principal (synchro, comptes)
+        run: node tools/main-test.js
