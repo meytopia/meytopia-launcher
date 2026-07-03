@@ -32,6 +32,7 @@ const code = [
   'const PARIS_HM_FMT = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", minute: "numeric", hour12: false });',
   extractConst('fmtSlotHM'),
   extractFn('fmtPlayTime'),
+  extractFn('fmtNum'),
   extractFn('fmtShortDate'),
   extractFn('statDayKeys'),
   extractFn('statTodayKey'),
@@ -54,7 +55,7 @@ const code = [
   extractFn('seasonTitles'),
   extractFn('myChallengeShare'),
   extractFn('pulseMessage'),
-  'module.exports = { fmtPlayTime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
+  'module.exports = { fmtPlayTime, fmtNum, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
 ].join('\n');
 const mod = { exports: {} };
 new Function('module', 'require', code)(mod, require);
@@ -247,6 +248,16 @@ check('myChallengeShare inconnu → null', L.myChallengeShare(data, 'mobKills', 
   check('semaine : infobulle « pic : 2 joueurs » en français', w.includes('pic : 2 joueurs'));
   check('semaine : jours vides « personne » dans l\'infobulle', w.includes('personne'));
   check('semaine : plus de date machine AAAA-MM-JJ dans l\'infobulle', !/title="\d{4}-\d{2}-\d{2}/.test(w));
+}
+
+// 0.29.0 — nombres groupés (fmtNum). Parité avec la page publique garantie par le même rendu
+// toLocaleString('fr-FR') que stats-core.fmtNum (on compare au rendu réel, pas à un ' ' littéral).
+{
+  eq('fmtNum 12345 groupé (= page publique)', L.fmtNum(12345), (12345).toLocaleString('fr-FR'));
+  eq('fmtNum 1000000 groupé', L.fmtNum(1000000), (1000000).toLocaleString('fr-FR'));
+  eq('fmtNum 0', L.fmtNum(0), '0');
+  eq('fmtNum arrondit', L.fmtNum(3.7), '4');
+  eq('fmtNum non-nombre → 0', L.fmtNum(undefined), '0');
 }
 
 if (fails === 0) { console.log('\n✔ launcher : tous les tests passent.'); process.exit(0); }

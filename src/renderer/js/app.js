@@ -1489,6 +1489,9 @@ function fmtPlayTime(mins) {
   const d = Math.floor(h / 24);
   return d + " j " + (h % 24) + " h";
 }
+// Nombre en français avec séparateur de milliers (« 12 345 ») — MÊME rendu que la page publique
+// (stats-core.fmtNum) pour que les grands nombres concordent entre le launcher et le site (parité).
+function fmtNum(n) { const v = Number(n); return (Number.isFinite(v) ? Math.round(v) : 0).toLocaleString("fr-FR"); }
 function fmtShortDate(iso) {
   if (!iso) return "—";
   try { return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }); }
@@ -1603,9 +1606,13 @@ async function loadMyStats(force) {
     const cards = [];
     const add = (emo, val, lab, pctKey, pctRaw, tip) => {
       if (val != null && val !== 0) {
+        // Un nombre brut est groupé en français (« 12 345 ») pour la parité avec le site ; une valeur
+        // déjà mise en forme (ex. « 1.2 km ») est laissée telle quelle. La garde « masquer si 0 »
+        // reste sur le nombre BRUT (fmtNum(0) donnerait « 0 » et afficherait une carte vide).
+        const disp = typeof val === "number" ? fmtNum(val) : String(val);
         const pct = pctKey ? percentileOf(res.data, pctKey, pctRaw) : null; // étiquette complète (« n°1 sur 3 » ou « parmi les 12 % meilleurs »)
         // tip et le title du rang sont des textes STATIQUES (français en dur) — jamais de données joueur.
-        cards.push(`<div class="mystats-card"${tip ? ` title="${tip}"` : ""}><div class="mystats-num">${emo} ${escapeHtml(String(val))}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct" title="Ta place parmi tous les joueurs de Meytopia pour cette statistique">${escapeHtml(pct)}</span>` : ""}</div></div>`);
+        cards.push(`<div class="mystats-card"${tip ? ` title="${tip}"` : ""}><div class="mystats-num">${emo} ${escapeHtml(disp)}</div><div class="mystats-lab">${lab}${pct ? ` · <span class="mystats-pct" title="Ta place parmi tous les joueurs de Meytopia pour cette statistique">${escapeHtml(pct)}</span>` : ""}</div></div>`);
       }
     };
     if (mc) {
@@ -2003,7 +2010,7 @@ function renderChallenges(challenges, data, me) {
   const fmtV = (metric, v) => {
     if (metric === "totalPlayMinutes") return fmtPlayTime(v);
     if (metric === "distTotM" || metric === "elytraM") return v >= 1000 ? fmtKm(v) : v + " m";
-    return String(v);
+    return fmtNum(v); // nombres groupés (parité avec la page publique)
   };
   // Règle vie privée/équité : les récompenses sont réservées aux joueurs VISIBLES. On l'affiche
   // toujours (personne ne doit se demander « pourquoi les autres et pas moi »), et en avertissement
@@ -2292,13 +2299,13 @@ function renderCommunityMc(data, me) {
   const box = $("#comm-mc");
   if (!box) return;
   const metrics = [
-    { key: "mobKills", label: "⚔️ Tueurs de monstres", fmt: (v) => v + " mobs" },
+    { key: "mobKills", label: "⚔️ Tueurs de monstres", fmt: (v) => fmtNum(v) + " mobs" },
     { key: "playMin", label: "⏱ Temps en jeu", fmt: (v) => fmtPlayTime(v) },
     { key: "distTotM", alt: "distM", label: "🥾 Distance parcourue", fmt: (v) => v >= 1000 ? fmtKm(v) : v + " m" },
-    { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => v + " minerais" },
-    { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => v + " poissons" },
+    { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => fmtNum(v) + " minerais" },
+    { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => fmtNum(v) + " poissons" },
     { key: "noDeathMin", label: "🛡️ Série sans mourir", tip: "Temps de jeu écoulé depuis la dernière mort — le compteur repart à zéro quand on meurt", fmt: (v) => fmtPlayTime(v) },
-    { key: "adv", label: "🏆 Succès", fmt: (v) => v + " succès" },
+    { key: "adv", label: "🏆 Succès", fmt: (v) => fmtNum(v) + " succès" },
   ];
   let any = false;
   const row = (r, i, m) => `<div class="comm-rank${me && r.name === me ? " is-me" : ""}"><span class="comm-rank-pos comm-rank-${Math.min(i + 1, 3)}">${i === 0 ? "👑" : i + 1}</span><img class="comm-rank-ava" width="22" height="22" loading="lazy" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}${me && r.name === me ? '<span class="me-tag">toi</span>' : ""}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`;
