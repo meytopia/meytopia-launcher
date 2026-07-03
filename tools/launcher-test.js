@@ -7,23 +7,13 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const EX = require('./extract'); // outillage d'extraction commun (partagé avec la régie)
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app.js'), 'utf8');
 
-// Extrait une fonction top-level `function name(...) { ... }` (fin = première « } » en colonne 0).
-function extractFn(name) {
-  const re = new RegExp('^function ' + name + '\\([\\s\\S]*?^\\}', 'm');
-  const m = src.match(re);
-  if (!m) throw new Error('fonction introuvable : ' + name);
-  return m[0];
-}
-// Extrait une déclaration const top-level d'une ligne.
-function extractConst(name) {
-  const re = new RegExp('^const ' + name + ' = .*$', 'm');
-  const m = src.match(re);
-  if (!m) throw new Error('const introuvable : ' + name);
-  return m[0];
-}
+// Adaptateurs liés à `src` : mêmes noms qu'avant, logique déportée dans tools/extract.js.
+const extractFn = (name) => EX.extractFn(src, name);
+const extractConst = (name) => EX.extractConst(src, name);
 
 const code = [
   'const escapeHtml = (s) => String(s == null ? "" : s);', // stub suffisant pour les tests (pas de DOM)
