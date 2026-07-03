@@ -1535,7 +1535,6 @@ async function loadMyStats(force) {
     $("#mystats-content").hidden = false;
     $("#mystats-name").textContent = "Connecte-toi pour voir tes stats";
     $("#mystats-sub").textContent = "le classement public reste visible ci-dessous";
-    $("#mystats-time").textContent = "—";
     $("#mystats-total").textContent = "—";
     $("#mystats-days").textContent = "—";
     $("#mystats-rank").textContent = "—";
@@ -1554,7 +1553,6 @@ async function loadMyStats(force) {
     $("#mystats-sub").textContent = iAmPrivate
       ? "Tes stats sont privées — elles ne sont pas publiées."
       : "Tu n'as pas encore été détecté en jeu — lance une partie !";
-    $("#mystats-time").textContent = iAmPrivate ? "🔒" : "0 min";
     $("#mystats-total").textContent = iAmPrivate ? "🔒" : "0 min";
     $("#mystats-days").textContent = iAmPrivate ? "🔒" : "0";
     $("#mystats-rank").textContent = "—";
@@ -1577,9 +1575,8 @@ async function loadMyStats(force) {
   const rankIndex = ranked.findIndex((p) => p.name === me);
   const rank = rankIndex >= 0 ? rankIndex + 1 : null;
 
-  $("#mystats-sub").textContent = "cette saison sur Meytopia";
-  $("#mystats-time").textContent = fmtPlayTime(meEntry.minutes);
-  $("#mystats-total").textContent = meEntry.totalMin ? fmtPlayTime(meEntry.totalMin) : "—";
+  $("#mystats-sub").textContent = "ton aventure sur Meytopia";
+  $("#mystats-total").textContent = fmtPlayTime(meEntry.minutes);
   $("#mystats-days").textContent = String(dayCount);
   $("#mystats-rank").textContent = rank ? `n°${rank} sur ${ranked.length}` : "—";
   $("#mystats-first").textContent = fmtShortDate(meEntry.first);
@@ -2129,7 +2126,7 @@ function renderCollective(data) {
   box.querySelectorAll(".comm-challenge-fill").forEach((el) => { el.style.width = (el.dataset.pct || 0) + "%"; });
   box.querySelectorAll(".comm-week-fill").forEach((el) => { el.style.height = (Number(el.dataset.h) || 0) + "%"; }); // plancher géré à la génération (0 = jour vide, barre vide)
 }
-// « Les titres de la saison » : distinctions ORIGINALES calculées sur la présence (marathonien, fidèle,
+// « Les titres du serveur » : distinctions ORIGINALES calculées sur la présence (marathonien, fidèle,
 // noctambule…) — les anciens « champions » doublonnaient les n°1 des Classements en jeu juste en dessous.
 function seasonTitles(data, metrics) {
   const arr = Object.values(metrics || {});
@@ -2153,7 +2150,7 @@ function renderHallOfFame(data, metrics) {
   const box = $("#comm-hof"); if (!box) return;
   const titles = seasonTitles(data, metrics);
   if (!titles.length) { box.innerHTML = ""; return; }
-  box.innerHTML = `<div class="comm-moments-title">🏅 Les titres de la saison</div><div class="comm-hof-grid">`
+  box.innerHTML = `<div class="comm-moments-title">🏅 Les titres du serveur</div><div class="comm-hof-grid">`
     + titles.map((c) => `<div class="comm-hof-card"><div class="comm-hof-cat">${c.emoji} ${escapeHtml(c.label)}</div>`
       + `<div class="comm-hof-name"><img class="comm-rank-ava" width="24" height="24" loading="lazy" src="https://mc-heads.net/avatar/${encodeURIComponent(c.uuid || c.name)}/24" alt="">${escapeHtml(c.name)}</div>`
       + `<div class="comm-hof-val">${escapeHtml(c.value)}</div></div>`).join("")
@@ -2276,7 +2273,7 @@ function renderCommunityRecords(data) {
   // (le « temps de jeu cumulé » n'est pas un record : il vit dans « Le serveur en chiffres », pas ici)
   const cards = [
     { e: "👥", v: String(peakVal), l: peakVal > 1 ? "joueurs en simultané" : "joueur en simultané", sub: "record" + (peakWhen ? " · " + peakWhen : "") },
-    { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs différents venus cette saison" : "joueur venu cette saison" },
+    { e: "🧑‍🤝‍🧑", v: String(uniques), l: uniques > 1 ? "joueurs différents venus sur le serveur" : "joueur venu sur le serveur" },
   ];
   if (rec.longestSession && typeof rec.longestSession.minutes === "number" && rec.longestSession.minutes > 0) {
     cards.push({ e: "🏃", v: fmtPlayTime(rec.longestSession.minutes), l: "plus longue session", sub: rec.longestSession.player ? "par " + rec.longestSession.player : "" });
@@ -2353,7 +2350,7 @@ function detectMoments(data) {
     if (pk > recordPeak) { recordPeak = pk; recordDay = k; }
   }
   if (recordPeak >= 2 && recordDay !== today) {
-    moments.push({ emoji: "🔥", text: `Record de la saison : ${recordPeak} joueurs en ligne en même temps`, when: dayLabelFr(recordDay) });
+    moments.push({ emoji: "🔥", text: `Record du serveur : ${recordPeak} joueurs en ligne en même temps`, when: dayLabelFr(recordDay) });
   }
 
   // 2) Pic du jour même
@@ -2380,8 +2377,8 @@ function detectMoments(data) {
   const seasonYoung = Number.isFinite(openedMs) ? openedMs >= weekAgo : true;
   if (privCount === 0 && seasonYoung && allSeen.length && allSeen.every(isNew) && newcomers.length) {
     moments.push({ emoji: "🚀", text: season ? `La saison ${season} vient d'ouvrir — ${pub.length} joueur${pub.length > 1 ? "s" : ""} déjà en jeu` : "Le serveur vient d'ouvrir ses portes", when: "cette semaine" });
-  } else if (newcomers.length === 1) moments.push({ emoji: "👋", text: `${newcomers[0]} a fait ses premiers pas cette saison !`, when: "cette semaine" });
-  else if (newcomers.length > 1) moments.push({ emoji: "👋", text: `${newcomers.length} joueurs ont fait leurs premiers pas cette saison`, when: "cette semaine" });
+  } else if (newcomers.length === 1) moments.push({ emoji: "👋", text: `${newcomers[0]} a fait ses premiers pas sur le serveur !`, when: "cette semaine" });
+  else if (newcomers.length > 1) moments.push({ emoji: "👋", text: `${newcomers.length} joueurs ont fait leurs premiers pas sur le serveur`, when: "cette semaine" });
 
   // 4) Couche-tard récent (quelqu'un vu après 1h du matin) — joueurs publics uniquement
   let latestName = null, latestSlot = -1;
@@ -2398,7 +2395,7 @@ function detectMoments(data) {
 
   // 5) Joueur le plus assidu de la saison (figure de proue) — joueurs publics uniquement
   const topPlayer = pub.map(([n, s]) => ({ n, m: s.minutes || 0 })).sort((a, b) => b.m - a.m)[0];
-  if (topPlayer && topPlayer.m >= 120) moments.push({ emoji: "🏆", text: `${topPlayer.n} mène la saison avec ${fmtPlayTime(topPlayer.m)} de jeu`, when: "cette saison" });
+  if (topPlayer && topPlayer.m >= 120) moments.push({ emoji: "🏆", text: `${topPlayer.n} est en tête du temps de jeu avec ${fmtPlayTime(topPlayer.m)}`, when: "en ce moment" });
 
   // 6) DEUXIÈME plus beau jour (le record est déjà le moment n°1 — sans l'exclure, ce bloc ne
   //    s'affichait jamais : c'était du code mort).
