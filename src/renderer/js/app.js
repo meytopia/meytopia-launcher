@@ -2493,6 +2493,35 @@ async function loadCommunity(force) {
   renderStreaks(data);
   renderDuos(data);
   renderWrapped(res);
+  renderDailyGifts(res);
+}
+
+// ===== 🎁 La hotte du cadeau du jour (gifts.json, si l'admin l'a activé) =====
+// Affiche la liste des cadeaux POSSIBLES — le tirage reste une surprise en jeu. Les noms viennent
+// des libellés choisis dans la régie (repli : identifiant rendu lisible). Aucune requête en plus :
+// le fichier arrive avec le reste des données de la page (cache conditionnel côté main).
+function renderDailyGifts(res) {
+  const box = $("#comm-gifts");
+  if (!box) return;
+  const g = res && res.gifts;
+  const items = (g && g.enabled === true && Array.isArray(g.items))
+    ? g.items.filter((it) => it && typeof it.id === "string" && it.id)
+    : [];
+  if (!items.length) { box.hidden = true; box.innerHTML = ""; return; }
+  const nom = (it) => (typeof it.label === "string" && it.label.trim())
+    ? it.label.trim()
+    : String(it.id).split(":").pop().replace(/_/g, " ");
+  const puce = (it) => {
+    const n = Math.max(1, Math.min(64, Number(it.count) || 1));
+    return `<span class="gift-chip${it.golden === true ? " gold" : ""}">${it.golden === true ? "✨ " : ""}${escapeHtml(nom(it))}${n > 1 ? ` ×${n}` : ""}</span>`;
+  };
+  const dores = items.filter((it) => it.golden === true).length;
+  box.innerHTML = `<div class="comm-moments-title">🎁 Le cadeau du jour</div>`
+    + `<div class="gift-note">À ta <b>première connexion de la journée</b>, tu reçois UN de ces cadeaux au hasard`
+    + (dores ? ` — dont ${dores} cadeau${dores > 1 ? "x" : ""} doré${dores > 1 ? "s" : ""} rare${dores > 1 ? "s" : ""} ✨` : "")
+    + `. Réservé aux joueurs visibles (pas en mode privé).</div>`
+    + `<div class="gift-chips">${items.map(puce).join("")}</div>`;
+  box.hidden = false;
 }
 $("#community-refresh").addEventListener("click", () => loadCommunity(true));
 

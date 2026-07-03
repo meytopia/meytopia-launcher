@@ -562,10 +562,12 @@ ipcMain.handle('stats:get', async () => {
     const meUuid = active ? active.uuid : null;
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS ?? 10000);
-    const [data, live, challenges] = await Promise.all([
+    const { RAW_BASE: RB } = require('./config');
+    const [data, live, challenges, gifts] = await Promise.all([
       fetchJsonCached(STATS_URL, ctrl.signal),
       fetchJsonCached(LIVE_URL, ctrl.signal),
       fetchJsonCached(CHALLENGES_URL, ctrl.signal),
+      fetchJsonCached(`${RB}/gifts.json`, ctrl.signal), // 🎁 hotte du cadeau du jour (affichage launcher)
     ]);
     clearTimeout(to);
     // « Ta saison en chiffres » : archive de la saison PRÉCÉDENTE si elle existe (cache
@@ -580,8 +582,8 @@ ipcMain.handle('stats:get', async () => {
         if (!archive) archiveSeason = null;
       }
     } catch { archive = null; archiveSeason = null; }
-    return { me, meUuid, data, live, challenges, archive, archiveSeason };
-  } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null, archive: null, archiveSeason: null }; }
+    return { me, meUuid, data, live, challenges, gifts, archive, archiveSeason };
+  } catch { return { me: null, meUuid: null, data: null, live: null, challenges: null, gifts: null, archive: null, archiveSeason: null }; }
 });
 
 // Etat temps reel SEUL (live.json, petit fichier) — pour le rafraichissement frequent
