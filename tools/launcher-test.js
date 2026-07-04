@@ -23,6 +23,7 @@ const code = [
   extractConst('fmtSlotHM'),
   extractFn('fmtPlayTime'),
   extractFn('fmtNum'),
+  extractFn('playtime'),
   extractFn('fmtShortDate'),
   extractFn('statDayKeys'),
   extractFn('statTodayKey'),
@@ -45,7 +46,7 @@ const code = [
   extractFn('seasonTitles'),
   extractFn('myChallengeShare'),
   extractFn('pulseMessage'),
-  'module.exports = { fmtPlayTime, fmtNum, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
+  'module.exports = { fmtPlayTime, fmtNum, playtime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
 ].join('\n');
 const mod = { exports: {} };
 new Function('module', 'require', code)(mod, require);
@@ -125,7 +126,13 @@ check('titres sans le joueur privé', !titles.some((t) => t.name === 'Cach3'));
 
 // myChallengeShare : contribution personnelle
 eq('myChallengeShare mobKills', L.myChallengeShare(data, 'mobKills', 'Meylou'), 103);
-eq('myChallengeShare totalPlayMinutes (saison)', L.myChallengeShare(data, 'totalPlayMinutes', 'Meylou'), 59);
+// Le défi « temps de jeu » = VRAI temps Minecraft (mc.playMin 953), cohérent avec « de jeu cumulé ».
+eq('myChallengeShare totalPlayMinutes = vrai temps de jeu', L.myChallengeShare(data, 'totalPlayMinutes', 'Meylou'), 953);
+// playtime() : préfère totalMin, puis mc.playMin, puis minutes
+eq('playtime préfère totalMin', L.playtime({ totalMin: 500, mc: { playMin: 200 }, minutes: 10 }), 500);
+eq('playtime → mc.playMin si pas de totalMin', L.playtime({ mc: { playMin: 200 }, minutes: 10 }), 200);
+eq('playtime → minutes en dernier repli', L.playtime({ minutes: 10 }), 10);
+eq('playtime(vide) = 0', L.playtime(null), 0);
 check('myChallengeShare inconnu → null', L.myChallengeShare(data, 'mobKills', 'Personne') === null);
 
 // pulseMessage : l'heure Europe/Paris doit être un entier fini (le format fr renvoie « 16 h » —
