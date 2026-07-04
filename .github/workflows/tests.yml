@@ -33,3 +33,5 @@ jobs:
         run: node tools/launcher-test.js
       - name: Tests processus principal (synchro, comptes)
         run: node tools/main-test.js
+      - name: Tests connexion serveur (adresse SRV, servers.dat)
+        run: node tools/servers-test.js
