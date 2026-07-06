@@ -16,6 +16,7 @@ const { Launch } = require('minecraft-java-core');
 const { getGameDir } = require('./paths');
 const remote = require('./remote');
 const sync = require('./sync');
+const activation = require('./activation');
 const content = require('./content');
 const accounts = require('./accounts');
 const servers = require('./servers');
@@ -112,6 +113,10 @@ async function play() {
       setState('idle');
       return { ok: false, reason: 'download-interrupted' };
     }
+    // Packs fournis par le modpack (resourcepacks/shaderpacks) : la synchro ci-dessus les a
+    // INSTALLÉS, ceci les ACTIVE — une seule fois chacun, le choix du joueur reste roi ensuite.
+    // Best-effort : ne bloque jamais le lancement.
+    try { activation.applyPackActivation(manifest); } catch { /* confort uniquement */ }
   }
 
   // 4) Blocklist : lancement bloqué tant que des fichiers interdits existent (CDC F6)

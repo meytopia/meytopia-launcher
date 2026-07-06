@@ -35,3 +35,5 @@ jobs:
         run: node tools/main-test.js
       - name: Tests connexion serveur (adresse SRV, servers.dat)
         run: node tools/servers-test.js
+      - name: Tests activation packs (options.txt, iris.properties)
+        run: node tools/activation-test.js

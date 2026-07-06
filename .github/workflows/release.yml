@@ -40,6 +40,7 @@ jobs:
           node tools/launcher-test.js
           node tools/main-test.js
           node tools/servers-test.js
+          node tools/activation-test.js
 
       - name: Build de l'installeur
         # Signature de code AUTOMATIQUE si les secrets CSC_LINK (PFX base64) + CSC_KEY_PASSWORD sont définis ;
