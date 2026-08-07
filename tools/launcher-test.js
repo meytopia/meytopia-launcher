@@ -39,6 +39,7 @@ const code = [
   extractFn('weekActivityHtml'),
   extractFn('computePlayerMetrics'),
   extractConst('computePlayerMetricsMemo'),
+  extractFn('survieMoyenne'),
   extractFn('challengeEndsText'),
   extractFn('liveAgeText'),
   extractFn('percentileOf'),
@@ -46,7 +47,7 @@ const code = [
   extractFn('seasonTitles'),
   extractFn('myChallengeShare'),
   extractFn('pulseMessage'),
-  'module.exports = { fmtPlayTime, fmtNum, playtime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText };',
+  'module.exports = { fmtPlayTime, fmtNum, playtime, fmtKm, pubEntries, collectiveStats, collectiveMilestones, weekActivityHtml, computePlayerMetrics, computePlayerMetricsMemo, percentileOf, detectMoments, seasonTitles, myChallengeShare, pulseMessage, statTodayKey, dayKeyShift, maxSlot, dayPeaks, challengeEndsText, liveAgeText, survieMoyenne };',
 ].join('\n');
 const mod = { exports: {} };
 new Function('module', 'require', code)(mod, require);
@@ -56,18 +57,23 @@ let fails = 0;
 const check = (name, cond) => { console.log((cond ? '  PASS ' : '  FAIL ') + name); if (!cond) fails++; };
 const eq = (name, got, want) => check(`${name} (= ${JSON.stringify(want)}, got ${JSON.stringify(got)})`, JSON.stringify(got) === JSON.stringify(want));
 
+// Dates RELATIVES à maintenant : « nouveau joueur » se juge sur une fenêtre glissante de 7 jours.
+// Avec des dates fixes, ces tests s'éteignaient tout seuls au bout d'une semaine (vécu : 4 tests
+// tombés en panne silencieusement). Toute fixture liée à cette fenêtre DOIT rester relative.
+const ilYa = (jours) => new Date(Date.now() - jours * 86400000).toISOString();
+
 // Jeu de données inspiré de l'état réel du serveur (3 joueurs dont les stats des captures) + 1 joueur privé.
 const data = {
   version: 5,
   server: { season: 2 },
   seen: {
-    Meylou: { uuid: 'u1', minutes: 59, first: '2026-07-01T10:00:00Z', last: '2026-07-01T20:00:00Z',
+    Meylou: { uuid: 'u1', minutes: 59, first: ilYa(2), last: ilYa(2),
       mc: { playMin: 953, mobKills: 103, distTotM: 124700, diamonds: 0, fishCaught: 0, adv: 115, noDeathMin: 489 } },
-    Alexis: { uuid: 'u2', minutes: 40, first: '2026-07-01T11:00:00Z',
+    Alexis: { uuid: 'u2', minutes: 40, first: ilYa(2),
       mc: { playMin: 349, mobKills: 0, distTotM: 7600, diamonds: 8, fishCaught: 2, adv: 43 } },
-    Bubbl3: { uuid: 'u3', minutes: 7, first: '2026-07-01T12:00:00Z',
+    Bubbl3: { uuid: 'u3', minutes: 7, first: ilYa(3),
       mc: { playMin: 111, mobKills: 2, distTotM: 9600, diamonds: 0, fishCaught: 0, adv: 26 } },
-    Cach3: { uuid: 'up', minutes: 999, first: '2026-07-01T09:00:00Z',
+    Cach3: { uuid: 'up', minutes: 999, first: ilYa(1),
       mc: { playMin: 9999, mobKills: 9999, distTotM: 999999, diamonds: 999, fishCaught: 99, adv: 999 } },
   },
   priv: { up: true },
@@ -255,6 +261,36 @@ check('myChallengeShare inconnu → null', L.myChallengeShare(data, 'mobKills', 
   eq('fmtNum 0', L.fmtNum(0), '0');
   eq('fmtNum arrondit', L.fmtNum(3.7), '4');
   eq('fmtNum non-nombre → 0', L.fmtNum(undefined), '0');
+}
+
+// Survie moyenne (nouvelle stat) : temps de jeu ÷ (morts + 1) — ne s'efface JAMAIS, contrairement à
+// noDeathMin (= time_since_death, remis à zéro par Minecraft à chaque mort).
+{
+  eq('survieMoyenne 120 min / 0 mort', L.survieMoyenne({ playMin: 120, deaths: 0 }), 120);
+  eq('survieMoyenne 120 min / 3 morts', L.survieMoyenne({ playMin: 120, deaths: 3 }), 30);
+  eq('survieMoyenne sans deaths → tout le temps', L.survieMoyenne({ playMin: 60 }), 60);
+  eq('survieMoyenne 0 min → null (carte masquée)', L.survieMoyenne({ playMin: 0, deaths: 5 }), null);
+  eq('survieMoyenne mc absent → null', L.survieMoyenne(null), null);
+  eq('survieMoyenne deaths négatif → ignoré', L.survieMoyenne({ playMin: 60, deaths: -2 }), 60);
+  // Cohérence avec le launcher ET le site : mêmes entrées → même résultat (parité web/launcher).
+  check('survieMoyenne cohérente pour un joueur réel (953 min, 2 morts → 318)', L.survieMoyenne({ playMin: 953, deaths: 2 }) === 318);
+  // Arrondi à 0 (5 min de jeu, 10 morts) : la carte doit être MASQUÉE, comme les classements
+  // qui excluent les 0 — sinon le joueur voit « 0 min » sans apparaître nulle part.
+  eq('survieMoyenne 5 min / 10 morts → 0 (carte masquée par la garde > 0)', L.survieMoyenne({ playMin: 5, deaths: 10 }), 0);
+}
+
+// percentileOf : le joueur COURANT peut être en mode privé (donc absent des listes publiques) — son
+// rang ne doit jamais dépasser le total (« n°4 sur 3 »), ni le pourcentage dépasser 100 % (« 108 % »).
+{
+  const pub = (n) => { const seen = {}; for (let i = 0; i < n; i++) seen['J' + i] = { uuid: 'u' + i, mc: { mobKills: 100 + i } }; return { seen, priv: {} }; };
+  // 3 joueurs publics (tous > 5), moi privé avec la plus petite valeur → rang 4 sur 4, pas « 4 sur 3 »
+  eq('privé sous tous les publics → « n°4 sur 4 » (jamais 4 sur 3)', L.percentileOf(pub(3), 'mobKills', 5), 'n°4 sur 4');
+  // 12 joueurs publics, moi privé dessous → pourcentage borné à 100
+  const p = L.percentileOf(pub(12), 'mobKills', 1);
+  check('privé sous 12 publics → pourcentage ≤ 100 % (got ' + p + ')', /parmi les (\d+) %/.test(p) && Number(p.match(/parmi les (\d+) %/)[1]) <= 100);
+  // Non-régression : un joueur PUBLIC garde exactement l'ancien affichage
+  eq('joueur public n°1 sur 3 (inchangé)', L.percentileOf(pub(3), 'mobKills', 102), 'n°1 sur 3');
+  eq('joueur public dernier sur 3 (inchangé)', L.percentileOf(pub(3), 'mobKills', 100), 'n°3 sur 3');
 }
 
 if (fails === 0) { console.log('\n✔ launcher : tous les tests passent.'); process.exit(0); }

@@ -1634,6 +1634,14 @@ async function loadMyStats(force) {
       add("🗡", mc.playerKills, "duels gagnés", "playerKills", mc.playerKills);
       if (typeof mc.noDeathMin === "number" && mc.noDeathMin > 0) add("🛡️", fmtPlayTime(mc.noDeathMin), "sans mourir", null, null, "Temps de jeu écoulé depuis la dernière mort — le compteur repart à zéro quand on meurt");
       add("🦘", mc.jumps, "sauts");
+      add("🐄", mc.animalsBred, "animaux élevés", "animalsBred", mc.animalsBred);
+      add("💥", mc.damageDealt, "dégâts infligés", "damageDealt", mc.damageDealt);
+      // Survie moyenne : temps de jeu ÷ (morts + 1). Contrairement à « sans mourir » (remis à zéro par
+      // Minecraft à chaque mort), celle-ci ne s'efface JAMAIS — elle récompense ceux qui meurent peu.
+      // > 0 obligatoire : arrondi à 0 min (ex. 5 min de jeu pour 10 morts), la carte afficherait
+      // « 0 min » alors que les classements, eux, excluent les 0 — incohérent pour le joueur.
+      const _sm = survieMoyenne(mc);
+      if (_sm != null && _sm > 0) add("🧬", fmtPlayTime(_sm), "survie moyenne", null, null, "Temps de jeu divisé par le nombre de morts : combien de temps tu tiens en moyenne avant de mourir. Ne repart jamais de zéro.");
     }
     // Même formule de période que la page Communauté : les compteurs mc.* sont des totaux réels.
     ig.innerHTML = cards.length ? `<div class="mystats-board-title">🎮 En jeu<span class="comm-period">depuis le début de Meytopia</span></div><div class="mystats-cards">${cards.join("")}</div>` : "";
@@ -1943,6 +1951,17 @@ function pubEntries(data) {
   const priv = (data && data.priv) ? data.priv : {};
   return Object.entries(seen).filter(([, s]) => !(s && s.uuid && priv[s.uuid] === true));
 }
+// « Survie moyenne » : temps de jeu ÷ (morts + 1), en minutes. Complète « sans mourir » (= la stat
+// vanilla time_since_death, que MINECRAFT remet à zéro à chaque mort) par une valeur qui, elle, ne
+// s'efface jamais. +1 au dénominateur : un joueur jamais mort a une survie = tout son temps de jeu
+// (et non une division par zéro). null si le joueur n'a pas encore de temps de jeu exploitable.
+function survieMoyenne(mc) {
+  if (!mc) return null;
+  const t = (typeof mc.playMin === "number" && mc.playMin > 0) ? mc.playMin : 0;
+  if (t <= 0) return null;
+  const morts = (typeof mc.deaths === "number" && mc.deaths > 0) ? mc.deaths : 0;
+  return Math.round(t / (morts + 1));
+}
 // Pic d'un tableau de slots sans spread (évite Math.max(...array) sur 1440 éléments, répété par jour).
 function maxSlot(arr) {
   let m = 0;
@@ -2251,8 +2270,12 @@ function percentileOf(data, key, myVal) {
   const vals = pubEntries(data).map(([, s]) => (s.mc && typeof s.mc[key] === "number") ? s.mc[key] : null).filter((v) => v != null && v > 0);
   if (vals.length < 3) return null;
   const rank = vals.filter((v) => v > myVal).length + 1;
-  if (vals.length < 10) return `n°${rank} sur ${vals.length}`;
-  return "parmi les " + Math.max(1, Math.round((rank / vals.length) * 100)) + " % meilleurs du serveur";
+  // Le joueur COURANT peut ne pas figurer dans vals (il est en mode privé → exclu des listes publiques) :
+  // son rang dépasserait alors le total, d'où les « n°4 sur 3 » et « parmi les 108 % meilleurs » vus à
+  // l'audit. On l'ajoute au total dans ce cas — et on borne à 100 % par sécurité.
+  const total = Math.max(vals.length, rank);
+  if (total < 10) return `n°${rank} sur ${total}`;
+  return "parmi les " + Math.min(100, Math.max(1, Math.round((rank / total) * 100))) + " % meilleurs du serveur";
 }
 function myTopPartner(data, me) {
   const d = computeDuosMemo(data).find((x) => x.a === me || x.b === me);
@@ -2313,14 +2336,20 @@ function renderCommunityMc(data, me) {
     { key: "diamonds", label: "💎 Mineurs de diamant", fmt: (v) => fmtNum(v) + " minerais" },
     { key: "fishCaught", label: "🎣 Pêcheurs", fmt: (v) => fmtNum(v) + " poissons" },
     { key: "noDeathMin", label: "🛡️ Série sans mourir", tip: "Temps de jeu écoulé depuis la dernière mort — le compteur repart à zéro quand on meurt", fmt: (v) => fmtPlayTime(v) },
+    // Ne s'efface JAMAIS (contrairement à « sans mourir ») : récompense ceux qui meurent peu, sur la durée.
+    { key: "survieMoy", calc: survieMoyenne, label: "🧬 Survie moyenne", tip: "Temps de jeu divisé par le nombre de morts : combien de temps on tient en moyenne avant de mourir. Ne repart jamais de zéro.", fmt: (v) => fmtPlayTime(v) },
     { key: "adv", label: "🏆 Succès", fmt: (v) => fmtNum(v) + " succès" },
+    { key: "elytraM", label: "🪽 Vol en élytre", fmt: (v) => v >= 1000 ? fmtKm(v) : v + " m" },
+    { key: "damageDealt", label: "💥 Dégâts infligés", tip: "Total des dégâts infligés (en points de vie)", fmt: (v) => fmtNum(v) + " dégâts" },
+    { key: "animalsBred", label: "🐄 Éleveurs", tip: "Nombre d'animaux élevés (reproduction)", fmt: (v) => fmtNum(v) + " animaux" },
   ];
   let any = false;
   const row = (r, i, m) => `<div class="comm-rank${me && r.name === me ? " is-me" : ""}"><span class="comm-rank-pos comm-rank-${Math.min(i + 1, 3)}">${i === 0 ? "👑" : i + 1}</span><img class="comm-rank-ava" width="22" height="22" loading="lazy" src="https://mc-heads.net/avatar/${encodeURIComponent(r.uuid || r.name)}/22" alt=""><span class="comm-rank-name">${escapeHtml(r.name)}${me && r.name === me ? '<span class="me-tag">toi</span>' : ""}</span><span class="comm-rank-val">${escapeHtml(String(m.fmt(r.v)))}</span></div>`;
   const cols = metrics.map((m) => {
     const ranked = pubEntries(data)
       .map(([name, s]) => {
-        let v = (s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null;
+        // m.calc = valeur DÉRIVÉE des stats (ex. survie moyenne) ; sinon lecture directe de mc[key].
+        let v = m.calc ? m.calc(s && s.mc) : ((s && s.mc && typeof s.mc[m.key] === "number") ? s.mc[m.key] : null);
         if (v == null && m.alt && s && s.mc && typeof s.mc[m.alt] === "number") v = s.mc[m.alt];
         return { name, uuid: (s && s.uuid) || null, v };
       })
